@@ -30,3 +30,11 @@ bin/
 # Mac / Windows OS 파일
 .DS_Store
 Thumbs.db
+
+.gitignore
+구성.pdf
+basic.txt
+
+# Room 3 generated packages (JAR, bundled runtime, Windows launcher)
+/src/room3/dist/
+/src/room3/run.bat
