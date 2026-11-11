@@ -7,13 +7,26 @@ import java.util.Arrays;
 import java.util.List;
 
 public class PortraitPuzzleDialog extends JDialog {
-    // 초상화 배치(좌 -> 우): 1번(아렌), 2번(세른), 3번(다렌), 4번(베른)
-    // 정답 순서: 아렌(1) -> 세른(2) -> 베른(4) -> 다렌(3)
-    private final List<Integer> answerSequence = Arrays.asList(1, 2, 4, 3);
+    private final Room2Panel parentRoom;
+    private final Image bgImg = Room2Panel.loadRoomImage("왕_초상화_계승순서_퍼즐");
+
+    private final String[] kingNames = {"아렌", "세른", "다렌", "베른"};
+
+    private final List<Integer> answerSequence1 = Arrays.asList(1, 2, 4, 3);
+    private final List<Integer> answerSequence2 = Arrays.asList(2, 4, 1, 3);
     private final List<Integer> currentInput = new ArrayList<>();
     private final JButton[] portraitButtons = new JButton[4];
+    private final JPanel puzzlePanel;
 
-    private final Room2Panel parentRoom;
+    private final double[][] portraitRatios = {
+        {0.165, 0.290, 0.140, 0.405},
+        {0.338, 0.290, 0.140, 0.405},
+        {0.523, 0.290, 0.140, 0.405},
+        {0.695, 0.290, 0.140, 0.405}
+    };
+
+    private final double[] nameplateCenterX = {0.235, 0.408, 0.593, 0.765};
+    private final double nameplateCenterY = 0.742;
 
     public PortraitPuzzleDialog(Window parent, Room2Panel parentRoom) {
         super(parent, "왕실 초상화 장식장", ModalityType.APPLICATION_MODAL);
@@ -23,43 +36,69 @@ public class PortraitPuzzleDialog extends JDialog {
         setLocationRelativeTo(parent);
         setResizable(false);
 
-        JPanel puzzlePanel = new JPanel() {
-            private Image bgImg = new ImageIcon("resources/room2/왕_초상화_계승순서_퍼즐.png").getImage();
+        puzzlePanel = new JPanel() {
+            private final Font nameFont = new Font("바탕", Font.BOLD, 15);
 
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 
                 int w = getWidth();
                 int h = getHeight();
 
                 if (bgImg != null) {
                     g2d.drawImage(bgImg, 0, 0, w, h, this);
+                } else {
+                    g2d.setColor(new Color(30, 20, 15));
+                    g2d.fillRect(0, 0, w, h);
                 }
 
-                String[] kingNames = {"아렌", "세른", "다렌", "베른"};
-                double[] plateRatioX = {0.218, 0.408, 0.595, 0.783};
-                int plateCenterY = (int) (h * 0.736); // 금색 명패 정중앙 높이
+                int pushOffset = 3;
+                for (int i = 0; i < 4; i++) {
+                    int portraitNum = i + 1;
+                    if (currentInput.contains(portraitNum) && bgImg != null) {
+                        int centerX = (int) (w * nameplateCenterX[i]) + 2;
+                        int innerW = (int) (w * 0.106);
+                        int innerX = centerX - (innerW / 2);
+                        int innerY = (int) (h * 0.322);
+                        int innerH = (int) (h * 0.336);
 
-                g2d.setFont(new Font("바탕", Font.BOLD, 20));
+                        Shape oldClip = g2d.getClip();
+                        g2d.clipRect(innerX, innerY + pushOffset, innerW, innerH - pushOffset);
+                        g2d.drawImage(bgImg, 0, pushOffset, w, h, this);
+                        g2d.setClip(oldClip);
+
+                        g2d.setColor(new Color(10, 5, 2, 220));
+                        g2d.fillRect(innerX, innerY, innerW, pushOffset);
+
+                        g2d.setColor(new Color(0, 0, 0, 110));
+                        g2d.fillRect(innerX, innerY + pushOffset, 3, innerH - pushOffset);
+                        g2d.fillRect(innerX + innerW - 3, innerY + pushOffset, 3, innerH - pushOffset);
+                    }
+                }
+
+                g2d.setFont(nameFont);
                 FontMetrics fm = g2d.getFontMetrics();
+                int centerY = (int) (h * nameplateCenterY);
 
                 for (int i = 0; i < 4; i++) {
                     String name = kingNames[i];
-                    int textW = fm.stringWidth(name);
-                    int drawX = (int) (w * plateRatioX[i]) - (textW / 2);
-                    int drawY = plateCenterY + (fm.getAscent() - fm.getDescent()) / 2;
+                    int textWidth = fm.stringWidth(name);
+                    int centerX = (int) (w * nameplateCenterX[i]);
 
-                    // 명패 각인 느낌을 주는 밝은 금빛 하이라이트
-                    g2d.setColor(new Color(255, 230, 150, 160));
-                    g2d.drawString(name, drawX + 1, drawY + 1);
+                    int textX = centerX - (textWidth / 2);
+                    int textY = centerY + (fm.getAscent() - fm.getDescent()) / 2;
 
-                    // 진한 고동색 본문 텍스트 (금색 명패 위에서 선명하게 보임)
-                    g2d.setColor(new Color(35, 18, 5));
-                    g2d.drawString(name, drawX, drawY);
+                    g2d.setColor(new Color(255, 235, 170, 160));
+                    g2d.drawString(name, textX + 1, textY + 1);
+
+                    g2d.setColor(new Color(35, 18, 10));
+                    g2d.drawString(name, textX, textY);
                 }
 
                 g2d.dispose();
@@ -67,42 +106,41 @@ public class PortraitPuzzleDialog extends JDialog {
         };
         puzzlePanel.setLayout(null);
 
-        // 4개의 초상화 액자 클릭 영역
-        int[][] portraitBounds = {
-            {150, 130, 135, 210}, // 1번 액자 (아렌)
-            {325, 130, 135, 210}, // 2번 액자 (세른)
-            {505, 130, 135, 210}, // 3번 액자 (다렌)
-            {685, 130, 135, 210}  // 4번 액자 (베른)
-        };
-
-        String[] kingNames = {"아렌", "세른", "다렌", "베른"};
-
         for (int i = 0; i < 4; i++) {
             final int portraitNumber = i + 1;
             JButton btn = new JButton();
-            btn.setBounds(
-                portraitBounds[i][0],
-                portraitBounds[i][1],
-                portraitBounds[i][2],
-                portraitBounds[i][3]
-            );
+
             btn.setContentAreaFilled(false);
             btn.setBorderPainted(false);
             btn.setFocusPainted(false);
             btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            btn.setToolTipText(kingNames[i] + "의 초상화"); // 마우스를 올렸을 때도 이름 표시
 
-            btn.addActionListener(e -> handlePortraitClick(portraitNumber, btn));
+            btn.addActionListener(e -> handlePortraitClick(portraitNumber));
             portraitButtons[i] = btn;
             puzzlePanel.add(btn);
         }
 
+        puzzlePanel.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                int pw = puzzlePanel.getWidth();
+                int ph = puzzlePanel.getHeight();
+                for (int i = 0; i < 4; i++) {
+                    int bx = (int) (pw * portraitRatios[i][0]);
+                    int by = (int) (ph * portraitRatios[i][1]);
+                    int bw = (int) (pw * portraitRatios[i][2]);
+                    int bh = (int) (ph * portraitRatios[i][3]);
+                    portraitButtons[i].setBounds(bx, by, bw, bh);
+                }
+            }
+        });
+
         add(puzzlePanel);
     }
 
-    private void handlePortraitClick(int portraitNumber, JButton clickedBtn) {
+    private void handlePortraitClick(int portraitNumber) {
         if (parentRoom.hasRoyalPass()) {
-            JOptionPane.showMessageDialog(this, "이미 장치가 해제되어 왕실 인증패를 획득했습니다.");
+            JOptionPane.showMessageDialog(this, "이미 초상화 장치가 해제되어 [왕실 인증패]를 획득했습니다.");
             return;
         }
 
@@ -111,8 +149,7 @@ public class PortraitPuzzleDialog extends JDialog {
         }
 
         currentInput.add(portraitNumber);
-        clickedBtn.setBorderPainted(true);
-        clickedBtn.setBorder(BorderFactory.createLineBorder(new Color(255, 215, 0), 3));
+        puzzlePanel.repaint();
 
         if (currentInput.size() == 4) {
             checkAnswer();
@@ -120,16 +157,12 @@ public class PortraitPuzzleDialog extends JDialog {
     }
 
     private void checkAnswer() {
-        if (currentInput.equals(answerSequence)) {
+        if (currentInput.equals(answerSequence1) || currentInput.equals(answerSequence2)) {
             parentRoom.setRoyalPassAcquired(true);
-
-            for (JButton btn : portraitButtons) {
-                btn.setBorderPainted(false);
-            }
 
             JOptionPane.showMessageDialog(
                 this,
-                "철컥- 소리와 함께 초상화 아래 비밀 벽감이 열렸습니다!\n[왕실 인증패]를 획득했습니다. 인증패 뒷면의 기록을 확인합니다.",
+                "철컥- 소리와 함께 초상화 아래 비밀 벽감이 열렸습니다!\n[왕실 인증패]를 획득했습니다.",
                 "퍼즐 해결",
                 JOptionPane.INFORMATION_MESSAGE
             );
@@ -140,15 +173,13 @@ public class PortraitPuzzleDialog extends JDialog {
         } else {
             JOptionPane.showMessageDialog(
                 this,
-                "초상화 뒤에서 둔탁한 소리가 나며 장치가 초기화되었습니다.\n계승 순서가 틀린 것 같습니다.",
-                "장치 작동 실패",
+                "초상화 뒤에서 둔탁한 소리가 나며 장치가 초기화되었습니다.\n기록의 계승 순서를 다시 확인해 보세요.",
+                "장치 초기화",
                 JOptionPane.WARNING_MESSAGE
             );
 
             currentInput.clear();
-            for (JButton btn : portraitButtons) {
-                btn.setBorderPainted(false);
-            }
+            puzzlePanel.repaint();
         }
     }
 }
