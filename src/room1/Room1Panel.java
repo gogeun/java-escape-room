@@ -2,131 +2,108 @@ package room1;
 
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import javax.swing.text.View;
-import room1.RoomProgress.Command;
 import room1.RoomProgress.Item;
 import room1.RoomProgress.Station;
 
-/** 팀 공통 창에는 이 패널을 추가하고, 생성자에 2번 방으로 이동하는 동작을 전달한다. */
+/** The team host supplies the passenger's name and the transition to Room 2. */
 public final class Room1Panel extends JPanel {
-    private static final double OPENING_SECONDS = 3.0;
-    private static final int HEADER_HEIGHT = 60;
+    private static final double LATCH_HOLD = .55, CONTROLS_FADE = .42;
+    private static final double DRIVE_AT = LATCH_HOLD + LiftJourney.DRIVE_START;
+    private static final double RESULT_AT = LATCH_HOLD + LiftJourney.DURATION - .42;
+    private static final double RESULT_FADE = .65, RESULT_HOLD = 1.05;
     private final Runnable onComplete;
     private final RoomProgress game = new RoomProgress();
+    private final String passenger;
     private final WorkshopScene scene = new WorkshopScene(this::inspect);
-    private final JPanel bar = new JPanel(new BorderLayout(12, 0));
-    private final JPanel journal = new JPanel(new BorderLayout(10, 3));
-    private final JLabel title = Brass.label("공중도시의 시간 기관실", 22, Brass.CREAM, true);
-    private final JLabel status = Brass.label("", 13, Brass.GOLD, true);
-    private final JLabel narration = Brass.label("붉은 경광등이 돌고 있다. 책상 위에 정비사가 펼쳐 둔 문서가 있다.", 16, Brass.CREAM, false);
-    private final JButton inventory = Brass.button("소지품", this::showInventory);
-    private final JButton hintButton = Brass.button("힌트", this::toggleHints);
-    private final JButton soundButton = Brass.button("소리 켜짐", this::toggleSound);
+    private final InventoryBar inventory = new InventoryBar(this::readItem);
+    private final FlightHud hud;
+    private JPanel result;
+    private BufferedImage departingControls;
+    private final JPanel instruments = new JPanel(null) {
+        @Override public boolean contains(int x, int y) {
+            for (Component part : getComponents()) {
+                if (part.isVisible() && part.contains(x - part.getX(), y - part.getY())) return true;
+            }
+            return false;
+        }
+        @Override protected void paintChildren(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            if (departingControls != null || result != null) Brass.smooth(g);
+            double movieTime = departure - LATCH_HOLD;
+            if (departingControls != null) {
+                g.setComposite(AlphaComposite.SrcOver.derive(1 - fade(movieTime / CONTROLS_FADE)));
+                g.drawImage(departingControls, 0, 0, getWidth(), getHeight(), null);
+            } else {
+                float opacity = result == null ? fade(opening / .48)
+                        : fade((departure - RESULT_AT) / RESULT_FADE);
+                g.setComposite(AlphaComposite.SrcOver.derive(opacity));
+                super.paintChildren(g);
+            }
+            g.dispose();
+        }
+        @Override public boolean isOptimizedDrawingEnabled() { return false; }
+    };
     private final JPanel shade = new JPanel(new GridBagLayout()) {
         @Override protected void paintComponent(Graphics g) {
-            g.setColor(new Color(11, 10, 8, 168));
+            g.setColor(new Color(9, 19, 20, 145));
             g.fillRect(0, 0, getWidth(), getHeight());
         }
     };
-    private final CardLayout sheetCards = new CardLayout();
-    private final JPanel pages = new JPanel(sheetCards);
-    private final JPanel sheet = new JPanel(new BorderLayout(0, 12));
-    private final JPanel hintSheet = new JPanel(new BorderLayout(0, 12));
-    private final JPanel body = new JPanel();
-    private final JScrollPane scroll = new JScrollPane(body);
-    private final JLabel sheetTitle = Brass.label("", 23, Brass.CREAM, true);
-    private final JPanel buttons = Brass.row();
-    private final JPanel tools = Brass.row();
-    private final Timer timer = new Timer(40, e -> tick());
+    private final EnumMap<Station, ExplorationPanel> closeups = new EnumMap<>(Station.class);
+    private final List<String> log = new ArrayList<>();
+    private final Timer timer = new Timer(1000 / 30, e -> tick());
     private RoomMedia.Audio audio;
+    private RoomMedia.Impact impact;
     private boolean muted = Boolean.getBoolean("skyborne.mute");
-    private Station active;
-    private boolean viewingInventory;
-    private boolean completionSent;
-    private boolean noticeIsError;
-    private String notice = "";
-    private long previousTick;
-    private double openingTime, travelTime, visiblePressure = 85;
-    private int sheetWidth;
-    private InstrumentStrip instrument;
-    private JComponent initialFocus;
+    private boolean shake = true, completionSent;
+    private Sheet inspection, utility;
+    private long previousTick, visibleSecond = -1;
+    private double elapsed, opening, departure;
 
-    public Room1Panel() { this(() -> {}); }
+    public Room1Panel() { this("기관사", () -> {}); }
+    public Room1Panel(Runnable onComplete) { this("기관사", onComplete); }
 
-    public Room1Panel(Runnable onComplete) {
+    public Room1Panel(String name, Runnable onComplete) {
         super(new BorderLayout());
-        this.onComplete = Objects.requireNonNull(onComplete, "onComplete");
-        setPreferredSize(new Dimension(1280, 720));
-        bar.setOpaque(false);
-        bar.add(title, BorderLayout.WEST);
-        tools.add(soundButton);
-        tools.add(inventory);
-        bar.add(tools, BorderLayout.EAST);
-        journal.setBackground(new Color(28, 24, 19, 239));
-        journal.setBorder(Brass.frame(11));
-        journal.add(status, BorderLayout.NORTH);
-        journal.add(narration, BorderLayout.CENTER);
-        shade.setOpaque(false);
-        shade.setBorder(BorderFactory.createEmptyBorder(HEADER_HEIGHT, 0, 0, 0));
-        shade.setVisible(false);
-        sheet.setBackground(Brass.INK);
-        sheet.setBorder(Brass.frame(20));
-        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-        body.setBackground(Brass.INK);
-        scroll.setBorder(null);
-        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
-        scroll.getViewport().setBackground(Brass.INK);
-        sheet.add(sheetTitle, BorderLayout.NORTH);
-        sheet.add(scroll, BorderLayout.CENTER);
-        sheet.add(buttons, BorderLayout.SOUTH);
-        hintSheet.setBackground(Brass.INK);
-        hintSheet.setBorder(Brass.frame(20));
-        pages.add(sheet, "inspect");
-        pages.add(hintSheet, "hints");
-        shade.add(pages);
+        this.onComplete = Objects.requireNonNull(onComplete);
+        passenger = name == null || name.isBlank() ? "기관사" : name.strip();
+        // Team hosts can enter this room directly, without preloading from the bookshelf.
+        CompletableFuture.runAsync(LiftJourney::preload);
+        setPreferredSize(new Dimension(1280, 760));
+        hud = new FlightHud(passenger, this::openLog, this::settings);
+        instruments.setOpaque(false);
+        instruments.add(hud);
+        instruments.add(inventory);
 
-        // 어두운 머리띠 위에 제목과 메뉴가 남도록 별도 레이어를 쓴다.
-        JPanel headerShadow = new JPanel() {
-            @Override protected void paintComponent(Graphics graphics) {
-                Graphics2D g = (Graphics2D) graphics.create();
-                g.setPaint(new GradientPaint(0, 0, new Color(12, 10, 8, 205), 0, getHeight(), new Color(12, 10, 8, 0)));
-                g.fillRect(0, 0, getWidth(), getHeight());
-                g.dispose();
-            }
-            @Override public boolean contains(int x, int y) { return false; }
-        };
-        headerShadow.setOpaque(false);
-        JLayeredPane layers = new JLayeredPane() {
+        shade.setOpaque(false);
+        shade.setVisible(false);
+        shade.addMouseListener(new MouseAdapter() {}); // Block clicks through the open sheet.
+        JLayeredPane stage = new JLayeredPane() {
             @Override public void doLayout() {
-                int w = getWidth(), h = getHeight();
-                scene.setBounds(0, 0, w, h);
-                headerShadow.setBounds(0, 0, w, 95);
-                int margin = Math.min(25, w/32);
-                Dimension hintSize = hintButton.getPreferredSize();
-                int hintX = w - margin - hintSize.width;
-                hintButton.setBounds(hintX, 15, hintSize.width, hintSize.height);
-                bar.setBounds(margin, 12, Math.max(1, hintX-margin-6), 48);
-                int footer = Math.min(840, w-2*margin);
-                journal.setBounds((w-footer)/2, h-88, footer, 72);
-                shade.setBounds(0, 0, w, h);
-                fitSheet();
+                scene.setBounds(0, 0, getWidth(), getHeight());
+                shade.setBounds(0, 0, getWidth(), getHeight());
+                instruments.setBounds(0, 0, getWidth(), getHeight());
+                layoutInstruments(getWidth(), getHeight());
+                adjustSheet();
             }
         };
-        layers.add(scene, Integer.valueOf(0));
-        layers.add(headerShadow, Integer.valueOf(1));
-        layers.add(bar, Integer.valueOf(2));
-        layers.add(journal, Integer.valueOf(2));
-        layers.add(shade, Integer.valueOf(3));
-        layers.add(hintButton, Integer.valueOf(4));
-        add(layers);
-        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ESCAPE"), "closeSheet");
-        getActionMap().put("closeSheet", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) { if (shade.isVisible()) back(); }
+        stage.add(scene, JLayeredPane.DEFAULT_LAYER);
+        stage.add(shade, JLayeredPane.MODAL_LAYER);
+        stage.add(instruments, JLayeredPane.POPUP_LAYER);
+        add(stage);
+        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ESCAPE"), "back");
+        getActionMap().put("back", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                if (shade.isVisible()) back();
+                else if (game.solved() < 2) settings();
+            }
         });
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) return;
@@ -134,436 +111,355 @@ public final class Room1Panel extends JPanel {
                 previousTick = System.nanoTime();
                 if (!muted) {
                     audio = new RoomMedia.Audio();
-                    if (openingTime == 0 && game.solved() < 3) play("rumble");
+                    if (departure >= DRIVE_AT && departure < LATCH_HOLD + LiftJourney.DURATION)
+                        audio.play("elevator", departure - DRIVE_AT);
                 }
+                if (impact == null) impact = RoomMedia.Impact.start(!muted);
                 timer.start();
             } else {
-                if (timer.isRunning()) openingTime = OPENING_SECONDS;
                 timer.stop();
                 closeAudio();
             }
         });
-        refreshBar();
+        remember("기관실 입장. 압력계가 85를 가리킨다.");
+        refresh();
+    }
+
+    /** Previous team hosts may still include this value on their result screen. */
+    public int getHintsUsed() { return 0; }
+    public int getScore() { return 100 * game.solved(); }
+    public long getElapsedSeconds() { return (long) elapsed; }
+
+    private String time() {
+        long seconds = getElapsedSeconds();
+        return String.format("%02d:%02d", seconds / 60, seconds % 60);
+    }
+
+    private void refresh() {
+        int solved = game.solved();
+        hud.setVitals(game.hearts(), solved);
+        scene.setStopStep(game.step());
+        scene.setValve(game.installed(Item.HANDLE), game.turns());
+    }
+
+    private void play(String sound) {
+        if (sound != null && audio != null && !muted) audio.play(sound);
     }
 
     private void closeAudio() {
+        if (impact != null) impact.cancel();
+        scene.setImpact(1, 0);
         if (audio != null) audio.close();
         audio = null;
     }
 
-    private void toggleSound() {
-        muted = !muted;
-        closeAudio();
-        if (!muted && isShowing()) audio = new RoomMedia.Audio();
-        refreshBar();
+    private void remember(String line) {
+        log.add(time() + "   " + line);
     }
 
-    private void play(String name) {
-        if (!muted && audio != null) audio.play(name);
+    private void feedback(String message, String sound) {
+        remember(message);
+        if (inspection != null) {
+            inspection.notice.setText(message);
+            inspection.notice.setForeground("fail".equals(sound) ? new Color(252, 165, 139) : Brass.GREEN);
+        }
+        play(sound);
+        if (game.solved() == 2 && audio != null && !muted) audio.prepare("elevator");
+        refresh();
     }
 
-    private void refreshBar() {
-        inventory.setText("소지품  " + game.count());
-        soundButton.setText(muted ? "소리 꺼짐" : "소리 켜짐");
-        String condition = game.solved() >= 3 ? "기관 정지" : game.solved() >= 2 ? "안전 압력" : "기관 폭주";
-        status.setForeground(game.solved() >= 2 ? Brass.GREEN : Brass.GOLD);
-        status.setText(condition + "     ·     정비 절차  " + game.solved() + " / 4");
+    private static float fade(double fraction) {
+        double t = Math.max(0, Math.min(1, fraction));
+        return (float)(t * t * (3 - 2 * t));
     }
 
     private void tick() {
         long now = System.nanoTime();
-        double elapsed = (now-previousTick)/1_000_000_000.0;
-        double dt = Math.min(.15, elapsed);
+        double dt = (now - previousTick) / 1_000_000_000.0;
         previousTick = now;
-        openingTime = Math.min(OPENING_SECONDS, openingTime + elapsed);
-        if (game.solved() >= 2) visiblePressure = Math.max(50, visiblePressure - 28*dt);
-        if (game.solved() == 4) {
-            travelTime += dt;
-            scene.update(1, game.solved(), Math.min(1, travelTime/2.6), dt);
-            if (travelTime >= 2.9 && !completionSent) {
-                completionSent = true;
-                title.setText("왕실의 비밀실");
-                narration.setText("문밖엔 촛불과 낡은 왕좌가 있다. 승강기는 수백 년 전의 성에 도착했다.");
-                status.setText("왕실의 비밀실 도착");
-                timer.stop();
-                closeAudio();
-                onComplete.run();
+        if (opening < 1) {
+            opening = Math.min(1, opening + dt);
+            instruments.repaint();
+        }
+        if (impact != null) {
+            double phase = impact.position(now);
+            scene.setImpact(phase, shake ? impact.strength(phase) : 0);
+        }
+        if (game.solved() < 2) {
+            elapsed += dt;
+            if (getElapsedSeconds() != visibleSecond) {
+                visibleSecond = getElapsedSeconds();
+                hud.setTime(time());
             }
         } else {
-            scene.update(openingTime / OPENING_SECONDS, game.solved(), 0, dt);
+            double before = departure;
+            departure += Math.min(dt, .15);
+            if (before < LATCH_HOLD && departure >= LATCH_HOLD) fadeControls();
+            if (departure >= LATCH_HOLD + CONTROLS_FADE) departingControls = null;
+            if (before < DRIVE_AT && departure >= DRIVE_AT) play("elevator");
+            if (result == null && departure >= RESULT_AT) showArrival();
+            instruments.repaint();
         }
-        if (instrument != null) instrument.setPressure(visiblePressure);
+        double transit = Math.min(1, Math.max(0, (departure - LATCH_HOLD) / LiftJourney.DURATION));
+        int visibleStage = game.solved() == 2 && departure < LATCH_HOLD ? 1 : game.solved();
+        scene.setValve(game.installed(Item.HANDLE), game.turns());
+        scene.update(opening, visibleStage, transit, Math.min(dt, .15));
+        if (departure >= RESULT_AT + RESULT_FADE + RESULT_HOLD && !completionSent) {
+            completionSent = true;
+            timer.stop();
+            closeAudio();
+            onComplete.run();
+        }
     }
 
     private void inspect(Station station) {
-        if (game.solved() == 4) return;
-        active = station;
-        viewingInventory = false;
-        notice = "";
-        if (station == Station.DESK && game.takeDocument()) {
-            say("정비 책상에서 정비 문서를 챙겼다.", "item");
+        if (game.solved() == 2) return;
+        JComponent content;
+        switch (station) {
+            case DESK, LAMP, TUBE, WINDOW ->
+                content = closeups.computeIfAbsent(station, s -> new ExplorationPanel(s, game, this::collect,
+                        message -> feedback(message, null), this::play));
+            case PRESSURE, STOP -> content = new MechanismPanel(station, game, this::feedback);
+            case LIFT -> content = note("승강기 문이 잠겨 있다. 문 위의 표시등 두 개가 압력 기관과 정지 패널에 연결돼 있다.");
+            default -> throw new IllegalStateException(station.name());
         }
-        showStation();
+        utility = null;
+        inspection = new Sheet(station.name, content, station != Station.LIFT);
+        displaySheet();
     }
 
-    private void say(String message, String sound) {
-        notice = message;
-        noticeIsError = false;
-        narration.setText(message);
-        play(sound);
-        refreshBar();
+    private void collect(Item item) {
+        if (game.take(item)) {
+            inventory.addItem(item);
+            feedback(item.name + " 획득. 아래 인벤토리에서 다시 살펴볼 수 있다.", "item");
+        }
     }
 
-    private void showStation() {
-        begin(active.name);
-        switch (active) {
-            case DESK:
-                document(Item.I01);
-                break;
-            case LOCKER:
-                if (game.solved() > 0) {
-                    paragraph("정비함이 열려 있다. 안쪽 걸쇠에 키트가 걸려 있던 자국이 남았다.");
-                } else {
-                    instrument(Station.LOCKER);
-                    paragraph("네 자리 황동 다이얼 아래에 ‘4차 톱니 회전 수’가 새겨져 있다.");
-                    numberInput("정비함 암호", "잠금 해제", 4);
-                }
-                break;
-            case PRESSURE:
-                instrument(Station.PRESSURE);
-                if (game.solved() >= 2) {
-                    paragraph("안전 압력에 도달했다. 제어판 아래의 열쇠 보관함이 열렸다.");
-                } else if (toolReady("압력 보정 키트 장착")) {
-                    paragraph("키트 설명서   안전 압력은 50. 밸브를 한 번 돌릴 때마다 압력이 5씩 내려간다.");
-                    numberInput("밸브를 돌릴 횟수", "밸브 돌리기", 1);
-                }
-                break;
-            case STOP:
-                if (game.solved() >= 3) {
-                    paragraph("기관이 멈췄다. 카드 배출구와 정지 기록지 출력구가 열려 있다.");
-                } else if (toolReady("해제키 돌리기")) {
-                    instrument(Station.STOP);
-                    procedure();
-                }
-                break;
-            case LIFT:
-                if (toolReady("비상 운행 카드 삽입")) {
-                    instrument(Station.LIFT);
-                    paragraph("판독기에 불이 들어왔다. 기관이 실제로 멈춘 시각을 24시간제 네 자리로 입력한다.");
-                    numberInput("시간 좌표  ·  HHMM", "승강기 운행", 4);
-                }
-                break;
-        }
-        if (!notice.isEmpty()) {
-            JTextArea result = prose(notice, noticeIsError ? new Color(247, 162, 137) : Brass.GREEN);
-            result.setFont(Brass.font(Font.BOLD, 14));
-            block(result);
-        }
-        buttons.add(Brass.button("소지품 열기", this::showInventory));
-        buttons.add(Brass.button("조사 마치기", this::back));
-        display();
+    private void readItem(Item item) {
+        if (game.solved() == 2) return;
+        openUtility(item.name, itemCard(item));
     }
 
-    private boolean toolReady(String verb) {
-        Station station = active;
-        if (game.installed(station.tool)) return true;
-        if (!game.has(station.tool)) {
-            paragraph("장치가 잠겨 있다. 필요한 물품은 ‘" + station.tool.name + "’이다.");
-            return false;
-        }
-        paragraph("‘" + station.tool.name + "’을 장치에 연결할 수 있다.");
-        JButton use = Brass.button(verb, () -> {
-            if (game.install(station)) {
-                say(station.tool.name + " 연결 완료. 장치가 입력을 기다린다.",
-                        station == Station.PRESSURE ? "valve" : "unlock");
-                showStation();
+    private JPanel itemCard(Item item) {
+        JPanel card = new JPanel(new BorderLayout(20, 10));
+        card.setBackground(Brass.PAPER);
+        card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        JPanel illustration = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                int size = Math.min(90, Math.min(getWidth(), getHeight()));
+                InventoryBar.drawItem((Graphics2D) g, item, (getWidth()-size)/2, (getHeight()-size)/2, size);
             }
+        };
+        illustration.setOpaque(false);
+        illustration.setPreferredSize(new Dimension(94, 94));
+        card.add(illustration, BorderLayout.WEST);
+        JTextArea copy = prose(item.heading + "\n\n" + item.text + "\n\n" + item.note, Brass.BROWN);
+        JScrollPane paper = scroll(copy, Brass.PAPER);
+        card.add(paper);
+        return card;
+    }
+
+    private static JTextArea prose(String message, Color color) {
+        JTextArea copy = new JTextArea(message);
+        copy.setFont(Brass.font(Font.PLAIN, 16));
+        copy.setLineWrap(true);
+        copy.setWrapStyleWord(true);
+        copy.setForeground(color);
+        copy.setOpaque(false);
+        copy.setEditable(false);
+        copy.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        return copy;
+    }
+
+    private static JScrollPane scroll(JComponent view, Color background) {
+        JScrollPane scroll = new JScrollPane(view);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(background);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        return scroll;
+    }
+
+    private JComponent note(String text) { return scroll(prose(text, Brass.CREAM), Brass.PLATE); }
+
+    private void openLog() {
+        if (game.solved() == 2) return;
+        JTextArea list = prose(String.join("\n\n", log), Brass.CREAM);
+        list.setCaretPosition(list.getDocument().getLength());
+        openUtility("메시지 기록", scroll(list, Brass.PLATE));
+    }
+
+    private void settings() {
+        if (game.solved() == 2) return;
+        JPanel switches = new JPanel(new GridLayout(0, 1, 0, 9));
+        switches.setOpaque(false);
+        String audioLabel = "효과음   " + (muted ? "꺼짐" : "켜짐");
+        JButton soundSwitch = Brass.button(audioLabel, () -> {
+            muted = !muted;
+            closeAudio();
+            if (!muted && isShowing()) { audio = new RoomMedia.Audio(); play("lever"); }
+            settings();
         });
-        block(use);
-        initialFocus = use;
-        return false;
+        switches.add(soundSwitch);
+        switches.add(Brass.button("입장 시 화면 진동   " + (shake ? "켜짐" : "꺼짐"), () -> {
+            shake = !shake;
+            settings();
+        }));
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(switches, BorderLayout.NORTH);
+        openUtility("설정", panel);
     }
 
-    private void numberInput(String label, String verb, int digits) {
-        JTextField field = new JTextField(digits + 1);
-        field.setFont(new Font(Font.MONOSPACED, Font.BOLD, 27));
-        field.setHorizontalAlignment(JTextField.CENTER);
-        field.setBackground(new Color(17, 15, 13));
-        field.setForeground(Brass.GOLD);
-        field.setCaretColor(Brass.CREAM);
-        field.setBorder(Brass.frame(7));
-        field.getAccessibleContext().setAccessibleName(label);
-        InstrumentStrip face = instrument;
-        field.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) { face.setDigits(field.getText()); }
-            @Override public void removeUpdate(DocumentEvent e) { face.setDigits(field.getText()); }
-            @Override public void changedUpdate(DocumentEvent e) { face.setDigits(field.getText()); }
-        });
-        JLabel caption = Brass.label(label, 15, Brass.MUTED, true);
-        caption.setLabelFor(field);
-        block(caption);
-        JPanel line = Brass.row();
-        line.add(field);
-        JButton confirm = Brass.button(verb, () -> submitNumber(field, digits));
-        field.addActionListener(e -> confirm.doClick());
-        line.add(confirm);
-        block(line);
-        initialFocus = field;
-    }
-
-    private void submitNumber(JTextField field, int digits) {
-        String answer = field.getText().trim();
-        if (!game.submit(active, answer)) {
-            notice = answer.matches("[0-9]{" + digits + "}") ? "장치가 응답하지 않는다. 단서를 다시 확인하자."
-                    : "숫자 " + digits + "자리를 입력해야 한다.";
-            noticeIsError = true;
-            play("fail");
-            showStation();
-            return;
-        }
-        switch (active) {
-            case LOCKER: say("걸쇠가 풀렸다. 압력 보정 키트를 챙겼다.", "unlock"); break;
-            case PRESSURE: say("증기가 빠지며 바늘이 내려간다. 정지 패널 해제키를 얻었다.", "steam"); break;
-            case LIFT:
-                say("철문이 닫힌다. 층 표시기의 바늘이 시간을 거슬러 돈다.", "elevator");
-                dismiss();
-                tools.setVisible(false);
-                return;
-            default: return;
-        }
-        showStation();
-    }
-
-    private void instrument(Station station) {
-        instrument = new InstrumentStrip(station, game, visiblePressure);
-        block(instrument);
-    }
-
-    private void procedure() {
-        paragraph("열쇠 꼬리표   시간축은 반드시 마지막에 잠가라.");
-        paragraph("경고문 ①   연료가 흐르는 동안 냉각 장치를 켜지 말 것.\n경고문 ②   증기 배출은 냉각 바로 다음에만 가능하다.");
-        paragraph("정비사 메모   빨간 비상 정지 버튼 고장. 누르면 처음부터 다시.");
-        JPanel keys = new JPanel(new GridLayout(1, 5, 5, 0));
-        keys.setOpaque(false);
-        for (Command c : new Command[]{Command.COOL, Command.AXIS, Command.FUEL, Command.VENT, Command.EMERGENCY}) {
-            keys.add(Brass.switchKey(c.label, c == Command.EMERGENCY, () -> press(c)));
-        }
-        block(keys);
-    }
-
-    private void press(Command command) {
-        if (!game.press(command)) {
-            notice = command == Command.EMERGENCY ? "고장 난 비상 정지 회로가 입력을 초기화했다."
-                    : "순서가 맞지 않는다. 정지 절차를 처음부터 다시 입력한다.";
-            noticeIsError = true;
-            play("fail");
-        } else if (game.solved() == 3) {
-            say("시간축이 잠겼다. 비상 운행 카드와 기관 정지 기록을 얻었다.", "unlock");
-        } else {
-            say(command.label + " 완료. 다음 정지 절차를 입력한다.", "lever");
-        }
-        showStation();
-    }
-
-    private void showInventory() {
-        viewingInventory = true;
-        begin("소지품");
-        if (game.count() == 0) paragraph("아직 챙긴 물품이 없다. 정비 책상을 살펴보자.");
-        for (Item item : Item.values()) {
-            if (!game.has(item)) continue;
-            String suffix = game.installed(item) ? "   ·   장착됨" : "";
-            block(Brass.button(item.name + suffix, () -> {
-                begin(item.name);
-                document(item);
-                buttons.add(Brass.button("목록으로", this::showInventory));
-                buttons.add(Brass.button("돌아가기", this::back));
-                display();
-            }));
-        }
-        buttons.add(Brass.button("돌아가기", this::back));
-        display();
-    }
-
-    private void toggleHints() {
-        if (shade.isVisible() && hintSheet.isVisible()) back();
-        else showHintTopics();
-    }
-
-    private void showHintTopics() {
-        hintSheet.removeAll();
-        hintSheet.add(Brass.label("퍼즐 힌트", 23, Brass.CREAM, true), BorderLayout.NORTH);
-        JPanel topics = new JPanel(new GridLayout(RoomProgress.PUZZLES.size(), 1, 0, 8));
-        topics.setOpaque(false);
-        for (Station puzzle : RoomProgress.PUZZLES) {
-            topics.add(Brass.button(puzzle.name, () -> showHint(puzzle)));
-        }
-        hintSheet.add(topics, BorderLayout.CENTER);
-        JPanel actions = Brass.row();
-        actions.add(Brass.button("돌아가기", this::back));
-        hintSheet.add(actions, BorderLayout.SOUTH);
-        sheetCards.show(pages, "hints");
-        display((JComponent) topics.getComponent(0));
-    }
-
-    private void showHint(Station puzzle) {
-        if (game.hintLevel(puzzle) == 0) game.revealHint(puzzle);
-        int level = game.hintLevel(puzzle);
-        hintSheet.removeAll();
-        hintSheet.add(Brass.label(puzzle.name + " 힌트   " + level + " / " + puzzle.hints.length,
-                23, Brass.CREAM, true), BorderLayout.NORTH);
-        StringBuilder text = new StringBuilder();
-        for (int i = 0; i < level; i++) {
-            if (i > 0) text.append("\n\n");
-            text.append(puzzle.hints[i]);
-        }
-        JScrollPane notes = new JScrollPane(prose(text.toString(), Brass.BROWN));
-        notes.getViewport().setBackground(Brass.PAPER);
-        notes.setBorder(Brass.frame(16));
-        notes.setBackground(Brass.PAPER);
-        hintSheet.add(notes, BorderLayout.CENTER);
-        JPanel actions = Brass.row();
-        JButton backButton = Brass.button("돌아가기", this::back);
-        actions.add(backButton);
-        actions.add(Brass.button("퍼즐 목록", this::showHintTopics));
-        if (level < puzzle.hints.length) {
-            String label = level == puzzle.hints.length - 1 ? "정답 보기" : "다음 힌트";
-            actions.add(Brass.button(label, () -> {
-                game.revealHint(puzzle);
-                showHint(puzzle);
-            }));
-        }
-        hintSheet.add(actions, BorderLayout.SOUTH);
-        display(backButton);
-    }
-
-    /** 팀 공통 점수 화면에서 사용할 수 있는, 이 방에서 새로 열어 본 힌트 단계 수. */
-    public int getHintsUsed() { return game.hintsUsed(); }
-
-    private void document(Item item) {
-        JPanel paper = new JPanel();
-        paper.setBackground(Brass.PAPER);
-        paper.setBorder(Brass.frame(16));
-        paper.setLayout(new BoxLayout(paper, BoxLayout.Y_AXIS));
-        paper.add(Brass.label(item.form, 13, Brass.BROWN, true));
-        paper.add(Box.createVerticalStrut(6));
-        paper.add(Brass.label(item.heading, 22, Brass.BROWN, true));
-        paper.add(Box.createVerticalStrut(14));
-        paper.add(prose(item.text, Brass.BROWN));
-        paper.add(Box.createVerticalStrut(6));
-        paper.add(prose(item.note, Brass.BROWN));
-        block(paper);
+    private void openUtility(String title, JComponent body) {
+        utility = new Sheet(title, body, false);
+        displaySheet();
     }
 
     private void back() {
-        if (hintSheet.isVisible()) {
-            sheetCards.show(pages, "inspect");
-            if (active != null || viewingInventory) display();
-            else {
-                dismiss();
-                hintButton.requestFocusInWindow();
-            }
-            return;
+        if (game.solved() == 2) return;
+        if (utility != null) utility = null;
+        else inspection = null;
+        displaySheet();
+    }
+
+    private void layoutInstruments(int width, int height) {
+        hud.setBounds(0, 0, width, 84);
+        Dimension dock = inventory.sizeFor(width);
+        int dockY = height - dock.height - 8;
+        inventory.setBounds((width - dock.width) / 2, dockY, dock.width, dock.height);
+        if (result != null) {
+            int captionHeight = Math.min(146, height / 3);
+            result.setBounds(0, height-captionHeight, width, captionHeight);
+            result.doLayout();
         }
-        if (viewingInventory && active != null) {
-            viewingInventory = false;
-            showStation();
-        } else dismiss();
+        int top = width < 850 ? 66 : 83;
+        int bottom = height - dockY + 2;
+        Insets reserved = shade.getInsets();
+        if (reserved.top != top || reserved.bottom != bottom)
+            shade.setBorder(BorderFactory.createEmptyBorder(top, 0, bottom, 0));
     }
 
-    private void dismiss() {
-        active = null;
-        viewingInventory = false;
-        instrument = null;
-        shade.setVisible(false);
-        boolean playing = game.solved() < 4;
-        hintButton.setVisible(playing);
-        tools.setVisible(playing);
-        scene.targetsVisible(playing);
-        if (playing) inventory.requestFocusInWindow();
+    private void adjustSheet() {
+        Sheet current = utility != null ? utility : inspection;
+        if (current == null) return;
+        int w = Math.max(1, Math.min(776, shade.getWidth() - 20));
+        int idealHeight = inspection == current ? 472 : 345;
+        Insets reserved = shade.getInsets();
+        int h = Math.max(1, Math.min(idealHeight, shade.getHeight() - reserved.top - reserved.bottom - 8));
+        Dimension size = new Dimension(w, h);
+        if (!size.equals(current.getPreferredSize())) current.setPreferredSize(size);
     }
 
-    private void begin(String heading) {
-        body.removeAll();
-        buttons.removeAll();
-        instrument = null;
-        initialFocus = null;
-        sheetTitle.setText(heading);
-    }
-
-    private JTextArea prose(String text, Color color) {
-        JTextArea p = new JTextArea(text) {
-            @Override public Dimension getPreferredSize() {
-                // BoxLayout의 첫 배치 전에도 실제 종이/패널 폭으로 줄 수를 계산한다.
-                int width = Math.max(80, sheetWidth - 66);
-                if (getParent() != null && getParent() != body) width -= 34;
-                View view = getUI().getRootView(this);
-                view.setSize(width, Integer.MAX_VALUE);
-                int height = (int)Math.ceil(view.getPreferredSpan(View.Y_AXIS));
-                return new Dimension(width, height + 2);
-            }
-            @Override public Dimension getMaximumSize() {
-                return new Dimension(Short.MAX_VALUE, getPreferredSize().height);
-            }
-        };
-        p.setFont(Brass.font(Font.PLAIN, 16));
-        p.setOpaque(false);
-        p.setForeground(color);
-        p.setEditable(false);
-        p.setFocusable(false);
-        p.setLineWrap(true);
-        p.setWrapStyleWord(true);
-        p.setAlignmentX(LEFT_ALIGNMENT);
-        return p;
-    }
-
-    private void paragraph(String text) { block(prose(text, Brass.CREAM)); }
-
-    private void block(JComponent content) {
-        content.setAlignmentX(LEFT_ALIGNMENT);
-        if (!(content instanceof JTextArea)) {
-            content.setMaximumSize(new Dimension(Short.MAX_VALUE, content.getPreferredSize().height));
+    private void displaySheet() {
+        shade.removeAll();
+        Sheet current = utility != null ? utility : inspection;
+        scene.targetsVisible(current == null && game.solved() < 2);
+        if (current != null) {
+            shade.add(current);
+            adjustSheet();
+            SwingUtilities.invokeLater(() -> { if (current.isShowing()) current.close.requestFocusInWindow(); });
         }
-        body.add(content);
-        body.add(Box.createVerticalStrut(10));
-    }
-
-    private void fitSheet() {
-        int w = Math.max(1, Math.min(666, shade.getWidth()-32));
-        int h = Math.max(1, Math.min(active == Station.STOP && !viewingInventory ? 504 : 426,
-                shade.getHeight() - HEADER_HEIGHT - 32));
-        if (sheetWidth != w) {
-            sheetWidth = w;
-            body.invalidate();
-        }
-        pages.setPreferredSize(new Dimension(w, h));
-    }
-
-    private void display() {
-        JComponent focus = initialFocus != null ? initialFocus : (JComponent) buttons.getComponent(0);
-        display(focus);
-    }
-
-    private void display(JComponent focus) {
-        scene.targetsVisible(false);
-        tools.setVisible(false);
-        fitSheet();
-        shade.setVisible(true);
+        shade.setVisible(current != null);
         shade.revalidate();
         shade.repaint();
-        scroll.getVerticalScrollBar().setValue(0);
-        SwingUtilities.invokeLater(focus::requestFocusInWindow);
     }
 
-    /** 팀 저장소에서도 별도 공통 클래스 없이 단독 실행할 수 있는 시연 진입점. */
+    private final class Sheet extends JPanel {
+        final JLabel notice = Brass.label(" ", 14, Brass.GREEN, false);
+        final JButton close = Brass.button("닫기", Room1Panel.this::back);
+        Sheet(String title, JComponent body, boolean hasFeedback) {
+            super(new BorderLayout(0, 7));
+            setOpaque(false);
+            setBorder(BorderFactory.createEmptyBorder(13, 16, 12, 16));
+            JPanel top = new JPanel(new BorderLayout(8, 0));
+            top.setOpaque(false);
+            top.add(Brass.label(title, 21, Brass.GOLD, true));
+            top.add(close, BorderLayout.EAST);
+            add(top, BorderLayout.NORTH);
+            add(body);
+            if (hasFeedback) add(notice, BorderLayout.SOUTH);
+        }
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            Brass.smooth(g);
+            int w = getWidth(), h = getHeight();
+            if (w > 20 && h > 16) {
+                HudMetal.chassis(g, HudMetal.plate(1, 1, w-3, h-4, 12));
+                g.setPaint(new GradientPaint(0, 0, new Color(45, 63, 54), w/2f, h, new Color(19, 29, 29)));
+                g.fill(HudMetal.plate(4, 4, w-9, h-10, 10));
+                g.setColor(new Color(121, 122, 88));
+                g.drawLine(17, 7, w-18, 7);
+                g.setColor(new Color(102, 105, 79));
+                g.drawLine(16, 55, w-17, 55);
+                HudMetal.pin(g, 9, h/2, 2);
+                HudMetal.pin(g, w-10, h/2, 2);
+            }
+            g.dispose();
+        }
+    }
+
+    private void fadeControls() {
+        // Fade the sheet, its dimming layer and each HUD widget as one exposure.
+        // Their opaque child painters can then finish immediately, with no ghosts on the moving camera.
+        if (instruments.getWidth() > 0 && instruments.getHeight() > 0) {
+            BufferedImage overlay = new BufferedImage(instruments.getWidth(), instruments.getHeight(),
+                    BufferedImage.TYPE_INT_ARGB_PRE);
+            Graphics2D g = overlay.createGraphics();
+            if (shade.isVisible()) shade.printAll(g);
+            instruments.printAll(g);
+            g.dispose();
+            departingControls = overlay;
+        }
+        inspection = null;
+        utility = null;
+        displaySheet();
+        hud.setVisible(false);
+        inventory.setVisible(false);
+    }
+
+    private void showArrival() {
+        int length = passenger.codePointCount(0, passenger.length());
+        String displayName = length > 16 ? passenger.substring(0, passenger.offsetByCodePoints(0, 15)) + "…" : passenger;
+        result = new JPanel() {
+            @Override protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setPaint(new GradientPaint(0, 0, new Color(21, 18, 18, 0),
+                        0, getHeight(), new Color(21, 18, 18, 204)));
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.dispose();
+            }
+        };
+        result.setOpaque(false);
+        result.setLayout(new BoxLayout(result, BoxLayout.Y_AXIS));
+        JLabel destination = new JLabel("과거의 성");
+        Font serif = new Font("Batang", Font.BOLD, 29);
+        destination.setFont(serif.canDisplay('성') ? serif : Brass.font(Font.BOLD, 29));
+        destination.setForeground(new Color(248, 235, 202));
+        destination.setAlignmentX(CENTER_ALIGNMENT);
+        JLabel record = Brass.label(displayName + "  ·  기관실 탈출  2 / 2  ·  " + time() + "  ·  " + getScore() + "점",
+                14, new Color(238, 220, 187), false);
+        record.putClientProperty("html.disable", Boolean.TRUE);
+        record.setAlignmentX(CENTER_ALIGNMENT);
+        result.add(Box.createVerticalGlue());
+        result.add(destination);
+        result.add(Box.createVerticalStrut(6));
+        result.add(record);
+        result.add(Box.createVerticalStrut(23));
+        instruments.add(result);
+        layoutInstruments(getWidth(), getHeight());
+        revalidate();
+        repaint();
+    }
+
+    /** Standalone Room 1 preview for the team's existing Eclipse launch configuration. */
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("공중도시의 시간 기관실");
             frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             frame.setContentPane(new Room1Panel());
-            Rectangle available = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-            frame.pack();
-            frame.setMinimumSize(new Dimension(Math.min(720, available.width), Math.min(480, available.height)));
-            frame.setSize(Math.min(frame.getWidth(), available.width), Math.min(frame.getHeight(), available.height));
+            Rectangle bounds = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            frame.setSize(Math.min(1280, bounds.width), Math.min(760, bounds.height));
+            frame.setMinimumSize(new Dimension(Math.min(720, bounds.width), Math.min(480, bounds.height)));
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
         });

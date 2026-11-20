@@ -3,74 +3,60 @@ package common;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.function.Consumer;
+import java.util.concurrent.CompletableFuture;
 import javax.swing.*;
 import room1.Room1Panel;
-import room2.Room2Panel;
-import room3.Room3Panel;
+import room1.WorkshopView;
 
-public class MainFrame extends JFrame {
-    private final CardLayout cardLayout = new CardLayout();
-    private final JPanel container = new JPanel(cardLayout);
-
-    private final Room1Panel room1Panel;
-    private final Room2Panel room2Panel;
-    private final Room3Panel room3Panel;
-
+/** One desktop window for the team build and the independently runnable Room 1 submission. */
+public final class MainFrame extends JFrame {
     public MainFrame() {
-        super("방탈출 게임");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
-        room1Panel = new Room1Panel(this::moveToRoom2);
-        room2Panel = new Room2Panel(this::moveToRoom3);
-        room3Panel = new Room3Panel(this::showEnding);
-
-        container.add(room1Panel, "ROOM1");
-        container.add(room2Panel, "ROOM2");
-        container.add(room3Panel, "ROOM3");
-
-        setContentPane(container);
-
+        super("시간의 서가");
+        setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        setContentPane(opening(this::showRoom));
+        Rectangle available = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        setSize(Math.min(1280, available.width), Math.min(760, available.height));
+        setMinimumSize(new Dimension(Math.min(720, available.width), Math.min(480, available.height)));
+        setLocationRelativeTo(null);
         addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(WindowEvent e) {
-                room3Panel.close();
+            @Override public void windowClosed(WindowEvent e) {
+                if (getContentPane() instanceof AutoCloseable room) {
+                    try { room.close(); }
+                    catch (Exception ex) { throw new IllegalStateException("방을 닫을 수 없습니다.", ex); }
+                }
             }
         });
-
-        cardLayout.show(container, "ROOM1");
-        pack();
-        setLocationRelativeTo(null);
     }
 
-    private void moveToRoom2() {
-        cardLayout.show(container, "ROOM2");
-        setSize(1280, 720);
-        setLocationRelativeTo(null);
-        room2Panel.requestFocusInWindow();
+    static BookStartPanel opening(Consumer<JPanel> display) {
+        CompletableFuture.runAsync(WorkshopView::preload);
+        Runnable room3 = () -> openTeamRoom("room3.Room3Panel", () -> {}, display);
+        Runnable room2 = () -> openTeamRoom("room2.Room2Panel", room3, display);
+        return new BookStartPanel(passenger -> display.accept(new Room1Panel(passenger, room2)));
     }
 
-    private void moveToRoom3() {
-        cardLayout.show(container, "ROOM3");
-        setSize(1600, 900);
-        setMinimumSize(new Dimension(960, 640));
-        setLocationRelativeTo(null);
-        room3Panel.requestFocusInWindow();
+    // Feature branches can contain empty classes for rooms their teammates are building.
+    private static void openTeamRoom(String className, Runnable next, Consumer<JPanel> display) {
+        try {
+            Class<?> room = Class.forName(className);
+            if (!JPanel.class.isAssignableFrom(room)) return;
+            Class<? extends JPanel> type = room.asSubclass(JPanel.class);
+            display.accept(type.getConstructor(Runnable.class).newInstance(next));
+        } catch (ClassNotFoundException absentInStandaloneBuild) {
+            // Keep the completed room's arrival/ending scene in a partial build.
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("팀 방을 열 수 없습니다. " + className, ex);
+        }
     }
 
-    private void showEnding() {
-        JOptionPane.showMessageDialog(
-            this,
-            "축하합니다! 1, 2, 3번 방을 모두 통과하여 탈출에 성공했습니다!",
-            "최종 탈출 성공",
-            JOptionPane.INFORMATION_MESSAGE
-        );
+    private void showRoom(JPanel room) {
+        setContentPane(room);
+        revalidate();
+        repaint();
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            UIManager.put("Label.font", new Font("Malgun Gothic", Font.PLAIN, 15));
-            UIManager.put("Button.font", new Font("Malgun Gothic", Font.PLAIN, 15));
-            new MainFrame().setVisible(true);
-        });
+        SwingUtilities.invokeLater(() -> new MainFrame().setVisible(true));
     }
 }

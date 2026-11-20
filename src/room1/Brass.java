@@ -11,13 +11,22 @@ final class Brass {
     static final Color EDGE = new Color(142, 111, 70), MUTED = new Color(205, 187, 153);
     static final Color PAPER = new Color(232, 215, 180), BROWN = new Color(62, 46, 29);
     static final Color GREEN = new Color(149, 207, 151);
+    private static final Font BASE = baseFont();
+    private static final Font[][] FONTS = new Font[4][96];
 
     private Brass() {}
 
-    static Font font(int style, int size) {
-        Font korean = new Font("Malgun Gothic", style, size);
+    private static Font baseFont() {
+        Font korean = new Font("Malgun Gothic", Font.PLAIN, 14);
         if (!korean.getFamily().equals(Font.DIALOG) && korean.canDisplay('한')) return korean;
-        return UIManager.getFont("Label.font").deriveFont(style, (float) size);
+        return UIManager.getFont("Label.font");
+    }
+
+    static Font font(int style, int size) {
+        if (size >= FONTS[style].length) return BASE.deriveFont(style, (float)size);
+        Font font = FONTS[style][size];
+        if (font == null) FONTS[style][size] = font = BASE.deriveFont(style, (float)size);
+        return font;
     }
 
     static void smooth(Graphics2D g) {
@@ -33,12 +42,6 @@ final class Brass {
         return label;
     }
 
-    static JPanel row() {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
-        row.setOpaque(false);
-        return row;
-    }
-
     static Border frame(int pad) {
         return new CompoundBorder(new LineBorder(EDGE), new EmptyBorder(pad, pad, pad, pad));
     }
@@ -49,13 +52,16 @@ final class Brass {
                 Graphics2D g = (Graphics2D) graphics.create();
                 smooth(g);
                 boolean lit = getModel().isRollover() || isFocusOwner();
-                Color top = lit ? new Color(105, 79, 48) : new Color(69, 55, 40);
-                Color bottom = new Color(42, 33, 26);
-                if (getModel().isArmed()) top = bottom;
-                g.setPaint(new GradientPaint(0, 0, top, 0, getHeight(), bottom));
-                g.fillRoundRect(0, 0, getWidth()-1, getHeight()-1, 7, 7);
-                g.setColor(lit ? GOLD : EDGE);
-                g.drawRoundRect(0, 0, getWidth()-1, getHeight()-1, 7, 7);
+                int w = getWidth(), h = getHeight();
+                if (w > 10 && h > 8) {
+                    HudMetal.chassis(g, HudMetal.plate(1, 1, w-3, h-4, 5));
+                    Color top = lit ? new Color(85, 112, 94) : new Color(56, 78, 69);
+                    Color bottom = new Color(24, 39, 38);
+                    g.setPaint(new GradientPaint(0, 2, getModel().isArmed() ? bottom : top, 0, h, bottom));
+                    g.fill(HudMetal.plate(3, 3, w-7, h-8, 4));
+                    g.setColor(lit ? GOLD : new Color(164, 151, 110));
+                    g.drawLine(8, 4, w-9, 4);
+                }
                 g.dispose();
                 super.paintComponent(graphics);
             }
@@ -70,34 +76,4 @@ final class Brass {
         return b;
     }
 
-    static JButton switchKey(String label, boolean emergency, Runnable action) {
-        JButton key = new JButton(label) {
-            @Override protected void paintComponent(Graphics graphics) {
-                Graphics2D g = (Graphics2D) graphics.create();
-                smooth(g);
-                int cx = getWidth()/2, y = getModel().isPressed() ? 7 : 4;
-                g.setPaint(new GradientPaint(0, 3, GOLD, 0, 45, BROWN));
-                g.fillOval(cx-22, 2, 44, 44);
-                g.setColor(INK);
-                g.fillOval(cx-19, 5, 38, 38);
-                Color light = emergency ? new Color(224, 100, 76) : new Color(235, 207, 152);
-                Color dark = emergency ? new Color(112, 34, 27) : new Color(138, 98, 48);
-                g.setPaint(new GradientPaint(cx, y, light, cx, y+32, dark));
-                g.fillOval(cx-17, y+2, 34, 33);
-                g.setColor(isFocusOwner() || getModel().isRollover() ? Color.WHITE : CREAM);
-                g.setFont(getFont());
-                int width = g.getFontMetrics().stringWidth(getText());
-                g.drawString(getText(), cx-width/2, 66);
-                if (isFocusOwner()) g.drawRoundRect(1, 1, getWidth()-3, getHeight()-3, 8, 8);
-                g.dispose();
-            }
-        };
-        key.setPreferredSize(new Dimension(85, 74));
-        key.setFont(font(Font.BOLD, 14));
-        key.setContentAreaFilled(false);
-        key.setBorderPainted(false);
-        key.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        key.addActionListener(e -> action.run());
-        return key;
-    }
 }
