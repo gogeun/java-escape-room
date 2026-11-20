@@ -39,14 +39,14 @@ public class ScrollPopupDialog extends JDialog {
                     "넘기지는 못했다."
                 };
 
-                int startY = 230;   // 상단 왕관 문장 바로 아래부터 시작
-                int lineHeight = 42; // 넉넉한 줄 간격
+                int startY = 230; 
+                int lineHeight = 42;
 
                 for (int i = 0; i < lines.length; i++) {
                     String line = lines[i];
                     if (line.isEmpty()) continue;
 
-                    // 첫 줄(제목)은 조금 더 크게 설정
+                    // 제목 크게 설정
                     g2d.setFont(i == 0 ? titleFont : bodyFont);
                     FontMetrics fm = g2d.getFontMetrics();
 
@@ -58,7 +58,7 @@ public class ScrollPopupDialog extends JDialog {
                     g2d.setColor(new Color(90, 60, 35, 70));
                     g2d.drawString(line, startX + 1, currentY + 1);
 
-                    // 본문 잉크 색상 (짙은 갈색)
+                    // 본문 짙은 갈색 설정
                     g2d.setColor(new Color(40, 25, 15));
                     g2d.drawString(line, startX, currentY);
                 }
