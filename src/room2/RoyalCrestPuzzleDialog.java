@@ -84,14 +84,7 @@ public class RoyalCrestPuzzleDialog extends JDialog {
                     g2d.drawString("이미지를 찾을 수 없습니다: " + loadedPathInfo, 40, 80);
                 }
 
-                // 중앙 금속 명패 안내 문구
-                g2d.setFont(new Font("바탕", Font.BOLD, 13));
-                g2d.setColor(new Color(45, 25, 10));
-                String guide = "문장을 드래그하여 홈에 끼우세요";
-                FontMetrics fmGuide = g2d.getFontMetrics();
-                g2d.drawString(guide, (w - fmGuide.stringWidth(guide)) / 2, (int) (h * 0.372));
 
-                // 1. 이미 홈에 끼워졌거나 드래그 중인 하단 조각 위치를 어둡게 처리
                 for (int i = 0; i < 6; i++) {
                     Rectangle r = getPieceRect(i, w, h);
                     if (isPieceUsed(i) || draggingPiece == i) {
@@ -102,12 +95,10 @@ public class RoyalCrestPuzzleDialog extends JDialog {
                         g2d.setStroke(new BasicStroke(2f));
                         g2d.drawPolygon(shieldHole);
                     } else if (bgImg == null) {
-                        // 이미지가 없을 때도 테스트할 수 있도록 기본 방패 도형 그리기
                         drawShieldPiece(g2d, i, r.x, r.y, r.width, r.height, false);
                     }
                 }
 
-                // 2. 드래그 중일 때 상단 3개 홈 가이드 하이라이트 표시
                 for (int s = 0; s < 3; s++) {
                     Rectangle sr = getSlotRect(s, w, h);
                     Polygon slotPoly = createShieldPolygon(sr.x, sr.y, sr.width, sr.height);
@@ -126,7 +117,6 @@ public class RoyalCrestPuzzleDialog extends JDialog {
                     }
                 }
 
-                // 3. 상단 3개 홈에 장착된 문장 조각 그리기
                 for (int s = 0; s < 3; s++) {
                     int pieceIdx = slotPieces[s];
                     if (pieceIdx != -1) {
@@ -135,7 +125,6 @@ public class RoyalCrestPuzzleDialog extends JDialog {
                     }
                 }
 
-                // 4. 현재 마우스로 드래그 중인 문장 조각 그리기
                 if (draggingPiece != -1) {
                     int drawW = (int) (w * 0.095);
                     int drawH = (int) (h * 0.195);
@@ -323,7 +312,7 @@ public class RoyalCrestPuzzleDialog extends JDialog {
         };
 
         for (String path : candidatePaths) {
-            File file = common.Resources.file(path);
+            File file = new File(path);
             if (file.exists()) {
                 try {
                     bgImg = ImageIO.read(file);
@@ -345,7 +334,7 @@ public class RoyalCrestPuzzleDialog extends JDialog {
                 }
             }
         }
-        loadedPathInfo = common.Resources.file("resources/room2/왕가의_문장_퍼즐.png").getAbsolutePath();
+        loadedPathInfo = new File("resources/room2/왕가의_문장_퍼즐.png").getAbsolutePath();
     }
 
     private boolean isPieceUsed(int pieceIdx) {
@@ -393,7 +382,6 @@ public class RoyalCrestPuzzleDialog extends JDialog {
             dispose();
             new RoyalSecretLetterDialog(owner).setVisible(true);
         } else {
-            parentRoom.onPuzzleFailed("P06"); // 오답 → 체력 감소
             JOptionPane.showMessageDialog(
                 this,
                 "문장 조각들이 서로 밀어내며 홈에서 튕겨 나왔습니다.\n인증패 뒷면의 기록을 다시 확인해 보세요.",

@@ -12,7 +12,7 @@ public class RoyalPassDialog extends JDialog {
         setResizable(false);
 
         JPanel panel = new JPanel() {
-            private Image passImg = new ImageIcon(common.Resources.path("resources/room2/왕실_인증패.png")).getImage();
+            private Image passImg = new ImageIcon("resources/room2/왕실_인증패.png").getImage();
             private Font titleFont = new Font("바탕", Font.BOLD, 17);
             private Font clueFont = new Font("바탕", Font.BOLD, 16);
 

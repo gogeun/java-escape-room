@@ -12,7 +12,7 @@ public class RoyalSecretLetterDialog extends JDialog {
         setResizable(false);
 
         JPanel panel = new JPanel() {
-            private Image parchmentImg = new ImageIcon(common.Resources.path("resources/room2/왕위_계승_기록.png")).getImage();
+            private Image parchmentImg = new ImageIcon("resources/room2/왕위_계승_기록.png").getImage();
             private Font titleFont = new Font("바탕", Font.BOLD, 24);
             private Font bodyFont = new Font("바탕", Font.BOLD, 17);
 
