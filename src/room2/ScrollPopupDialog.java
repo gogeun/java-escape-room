@@ -12,7 +12,7 @@ public class ScrollPopupDialog extends JDialog {
         setResizable(false);
 
         JPanel popupPanel = new JPanel() {
-            private Image popupImg = new ImageIcon("resources/room2/왕위_계승_기록.png").getImage();
+            private Image popupImg = new ImageIcon(common.Resources.path("resources/room2/왕위_계승_기록.png")).getImage();
             private Font titleFont = new Font("바탕", Font.BOLD, 25);
             private Font bodyFont = new Font("바탕", Font.BOLD, 22);
 
@@ -68,5 +68,6 @@ public class ScrollPopupDialog extends JDialog {
         };
 
         add(popupPanel);
+        common.RoomPopup.style(this);   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, ← 돌아가기 / ESC 로 닫기)
     }
 }

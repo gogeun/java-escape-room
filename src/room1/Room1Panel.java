@@ -6,14 +6,19 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import javax.swing.*;
+import common.RoomPanel;
 import room1.RoomProgress.Item;
 import room1.RoomProgress.Station;
 
-/** The team host supplies the passenger's name and the transition to Room 2. */
-public final class Room1Panel extends JPanel {
+/**
+ * The team host supplies the passenger's name and the transition to Room 2.
+ * [통합] common.RoomPanel 을 상속해 공통 시스템(체력 / 힌트 / 인벤토리 / 진행도)과 연결된다.
+ */
+public final class Room1Panel extends RoomPanel {
     private static final double LATCH_HOLD = .55, CONTROLS_FADE = .42;
     private static final double DRIVE_AT = LATCH_HOLD + LiftJourney.DRIVE_START;
     private static final double RESULT_AT = LATCH_HOLD + LiftJourney.DURATION - .42;
@@ -71,7 +76,8 @@ public final class Room1Panel extends JPanel {
     public Room1Panel(Runnable onComplete) { this("기관사", onComplete); }
 
     public Room1Panel(String name, Runnable onComplete) {
-        super(new BorderLayout());
+        super();
+        setLayout(new BorderLayout());   // [통합] 이 방은 BorderLayout 으로 무대(JLayeredPane)를 채운다
         this.onComplete = Objects.requireNonNull(onComplete);
         passenger = name == null || name.isBlank() ? "기관사" : name.strip();
         // Team hosts can enter this room directly, without preloading from the bookshelf.
@@ -102,6 +108,7 @@ public final class Room1Panel extends JPanel {
         getActionMap().put("back", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
                 if (shade.isVisible()) back();
+                else if (isInGame()) game().getFrame().openPause();   // [통합] 게임 중에는 공통 일시정지
                 else if (game.solved() < 2) settings();
             }
         });
@@ -122,6 +129,11 @@ public final class Room1Panel extends JPanel {
             }
         });
         remember("기관실 입장. 압력계가 85를 가리킨다.");
+        if (isInGame()) {   // [통합] 게임 중에는 공통 상단 바 / 가방을 쓰므로 방 자체 계기판과 공구함은 숨김
+            hud.setVisible(false);
+            inventory.setVisible(false);
+            muted = muted || !common.GameSettings.getInstance().isSoundOn();
+        }
         refresh();
     }
 
@@ -158,6 +170,7 @@ public final class Room1Panel extends JPanel {
     }
 
     private void feedback(String message, String sound) {
+        reportToGame(sound);
         remember(message);
         if (inspection != null) {
             inspection.notice.setText(message);
@@ -231,6 +244,8 @@ public final class Room1Panel extends JPanel {
     private void collect(Item item) {
         if (game.take(item)) {
             inventory.addItem(item);
+            giveItem(new common.Item("R1-" + item.name(), item.name, item.heading + " — " + item.text,
+                itemIcon(item), () -> readItem(item)));   // [통합] 공통 인벤토리에도 등록
             feedback(item.name + " 획득. 아래 인벤토리에서 다시 살펴볼 수 있다.", "item");
         }
     }
@@ -450,6 +465,83 @@ public final class Room1Panel extends JPanel {
         revalidate();
         repaint();
     }
+
+    // ------------------------------------------------------------------
+    // [통합] common.RoomPanel 연결 (체력 / 힌트 / 목표 / 진행도 / 인벤토리)
+    // ------------------------------------------------------------------
+
+    private int reportedSolved;   // 공통 시스템에 이미 알린 해결 퍼즐 수
+
+    /** feedback() 의 효과음 종류(fail 등)로 정답·오답을 판단해 공통 시스템에 알린다. */
+    private void reportToGame(String sound) {
+        if ("fail".equals(sound)) reportWrongAnswer("P02");   // 정지 패널 순서 오류 → 체력 -1
+        while (reportedSolved < game.solved()) {
+            reportedSolved++;
+            reportSolved("P0" + reportedSolved);               // P01 압력 밸브, P02 정지 패널
+            if (reportedSolved == 2 && isInGame()) game().getFrame().setHudOverlaysVisible(false);   // 승강기 출발 연출 동안 숨김
+        }
+        updateProgress();
+    }
+
+    /** 공통 인벤토리 칸에 쓸 아이콘 (InventoryBar 의 아이템 그림을 사용) */
+    private static BufferedImage itemIcon(Item item) {
+        BufferedImage icon = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = icon.createGraphics();
+        Brass.smooth(g);
+        InventoryBar.drawItem(g, item, 0, 0, 64);
+        g.dispose();
+        return icon;
+    }
+
+    @Override public String getRoomName() { return "공중도시의 시간 기관실"; }
+
+    @Override public common.RoomTheme getTheme() { return common.RoomTheme.BRASS; }   // 황동 + 비취색 UI
+
+    @Override public String getObjective() {
+        switch (getHintStage()) {
+            case 1: return "기관실을 둘러보고 정비 작업대에서 쓸 만한 도구를 찾자.";
+            case 2: return "밸브 손잡이를 얻었다.\n가운데 압력 기관의 빈 축에 끼워 보자.";
+            case 3: return "압력계가 85를 가리킨다.\n밸브를 돌려 안전 압력으로 낮추자.";
+            case 4: return "증기가 걷혔다.\n점검등을 켜서 벽에 걸린 정비 표찰을 찾아보자.";
+            case 5: return "정비 표찰의 절차대로\n기관 정지 패널을 조작하자.";
+            default: return "기관이 멈췄다! 시간 승강기를 타고 다음 방으로 이동한다.";
+        }
+    }
+
+    @Override public List<String> getCurrentHints() {
+        // hints.txt 의 room1 힌트를 못 읽었을 때 쓰는 기본 힌트
+        return Arrays.asList("화면의 기계와 물건을 클릭해 조사해 보세요.",
+            "아래 인벤토리의 아이템을 클릭하면 내용을 다시 읽을 수 있습니다.");
+    }
+
+    @Override protected String getHintRoomKey() { return "room1"; }
+
+    @Override protected int getHintStage() {
+        if (game.solved() >= 2) return 6;
+        if (game.solved() == 1) return game.has(Item.TAG) ? 5 : 4;
+        if (!game.has(Item.HANDLE)) return 1;
+        return game.installed(Item.HANDLE) ? 3 : 2;
+    }
+
+    /** [통합] 개발자 모드: 다음 단계 하나를 바로 진행 */
+    @Override public boolean devSkipPuzzle() {
+        if (game.solved() >= 2) return false;
+        inspection = null;
+        utility = null;
+        displaySheet();
+        switch (getHintStage()) {
+            case 1 -> { collect(Item.HANDLE); collect(Item.CHART); }
+            case 2 -> { game.devInstall(); feedback("[개발자] 밸브 축에 손잡이를 끼웠다.", "unlock"); }
+            case 3 -> { game.devSolveValve(); feedback("[개발자] 압력 50. 안전 밸브가 걸리고 증기가 걷혔다.", "steam"); }
+            case 4 -> collect(Item.TAG);
+            case 5 -> { game.devFinishStop(); feedback("[개발자] 시간축 잠금 완료. 시간 승강기의 문이 열렸다.", "unlock"); }
+            default -> { return false; }
+        }
+        return true;
+    }
+
+    @Override public int getTotalPuzzles() { return 2; }
+    @Override public int getSolvedCount() { return game.solved(); }
 
     /** Standalone Room 1 preview for the team's existing Eclipse launch configuration. */
     public static void main(String[] args) {

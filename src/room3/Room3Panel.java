@@ -8,8 +8,11 @@ import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.function.Consumer;
 
-/** All investigation views share the same controller and eight inventory slots. */
-public final class Room3Panel extends JPanel implements AutoCloseable {
+/**
+ * All investigation views share the same controller and eight inventory slots.
+ * [통합] common.RoomPanel 을 상속해 공통 시스템(체력 / 힌트 / 인벤토리 / 진행도)과 연결된다.
+ */
+public final class Room3Panel extends common.RoomPanel implements AutoCloseable {
     private final GameController game=new GameController(this::playSound);
     private final Runnable onComplete;
     private final Set<JDialog> dialogs=new HashSet<>();
@@ -21,13 +24,13 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
     private final JPanel inventory=new JPanel(new GridLayout(1,8,8,0));
     private final JPanel screen=new JPanel(new BorderLayout());
     private static final Color GOLD=new Color(205,165,89), DARK=new Color(23,16,20);
-    private final Cursor investigate=makeCursor();
+    private final Cursor investigate=isInGame()?Cursor.getPredefinedCursor(Cursor.HAND_CURSOR):makeCursor();   // [통합] 게임 중에는 1·2번 방과 같은 손 모양 커서
 
     public Room3Panel() { this(()->{}); }
 
     /** The host owns navigation. Called once on the EDT when this room is completed. */
     public Room3Panel(Runnable onComplete) {
-        super(new BorderLayout(0,8));this.onComplete=Objects.requireNonNull(onComplete,"onComplete");setBackground(DARK);
+        super();setLayout(new BorderLayout(0,8));this.onComplete=Objects.requireNonNull(onComplete,"onComplete");setBackground(DARK);
         JPanel header=new JPanel(new BorderLayout());header.setBackground(DARK);
         JLabel title=TextDisplay.label("  혈월의 예배당  /  BLOODMOON CHAPEL");title.setForeground(GOLD);header.add(title);
         add(header,BorderLayout.NORTH);add(screen);
@@ -40,6 +43,7 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
             if(isShowing()) openAudio();else close();
         });
         refreshInventory();chapel();
+        if(isInGame()) { header.setVisible(false); bottom.setVisible(false); }   // [통합] 게임 중에는 공통 상단 바 / 가방 사용 (아래 대사 · 인벤토리 줄 숨김)
     }
     public boolean isCompleted() { return game.state.gameCompleted; }
     public boolean isSoundEnabled() { return soundEnabled; }
@@ -49,7 +53,9 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
         if(enabled && isShowing()) openAudio();else closeAudio();
     }
     private void openAudio() { if(soundEnabled && audio==null) audio=new SoundManager(); }
-    private void playSound(String name) { if(isShowing() && soundEnabled && audio!=null) audio.playEffect(name); }
+    private void playSound(String name) {
+        if("candle_fail".equals(name)) reportWrongAnswer("P09");   // [통합] 촛불 순서 오류 → 체력 -1
+        if(isShowing() && soundEnabled && audio!=null) audio.playEffect(name); }
     private void closeAudio() { if(audio!=null) {audio.close();audio=null;} }
     /** Release this panel's audio and popups, preserving progress for later re-entry. */
     @Override public void close() {
@@ -70,7 +76,7 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
         JButton b=new JButton(TextDisplay.text(text),TextDisplay.icon(text));b.getAccessibleContext().setAccessibleName(text);
         b.setFocusPainted(false);b.setBackground(DARK);b.setForeground(GOLD);b.addActionListener(e->action.run());return b;
     }
-    private void say(String text) {dialogue.setText(text);dialogue.setToolTipText(TextDisplay.tooltip(text));refreshInventory();repaint();}
+    private void say(String text) {syncWithGame();dialogue.setText(text);dialogue.setToolTipText(TextDisplay.tooltip(text));refreshInventory();repaint();}
     private void refreshInventory() {
         inventory.removeAll();var items=game.inventory.items();
         for(int i=0;i<8;i++) {
@@ -87,11 +93,26 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
         inventory.revalidate();inventory.repaint();
     }
     private void showScene(Scene scene,boolean back) {
-        screen.removeAll();screen.add(scene);if(back) screen.add(button("← 예배당으로 돌아가기",this::chapel),BorderLayout.SOUTH);
+        screen.removeAll();
+        if(isInGame()) screen.add(inGameLayer(scene,back));   // [통합] 게임 중: 돌아가기 버튼을 장면 왼쪽 위에 띄움
+        else {screen.add(scene);if(back) screen.add(button("← 예배당으로 돌아가기",this::chapel),BorderLayout.SOUTH);}
         screen.revalidate();screen.repaint();
     }
+    /** [통합] 게임 중 조사 장면: 장면 왼쪽 위에 방 테마 모양의 "돌아가기" 버튼을 겹쳐 띄운다 */
+    private JComponent inGameLayer(Scene scene,boolean back) {
+        if(!back) return scene;
+        JButton backButton=new common.ThemedButton("← 돌아가기",this::chapel);
+        JLayeredPane layer=new JLayeredPane() {
+            @Override public void doLayout() {
+                scene.setBounds(0,0,getWidth(),getHeight());
+                Dimension d=backButton.getPreferredSize();backButton.setBounds(14,12,d.width,d.height);
+            }
+        };
+        layer.add(scene,JLayeredPane.DEFAULT_LAYER);layer.add(backButton,JLayeredPane.PALETTE_LAYER);
+        return layer;
+    }
     private void chapel() {
-        Scene s=new Scene("background.png");
+        Scene s=new Scene("background.png");s.markers=true;   // [통합] 조사 가능한 곳에 돋보기 표시
         s.spot(0,.59,.33,.40,"책상 조사",this::desk);
         if(game.state.candlesSolved && game.state.safeUnlocked)
             s.spot(.88,.76,.12,.23,"의자 아래 숨겨진 금고",this::safe);
@@ -101,7 +122,7 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
         });showScene(s,false);
     }
     private void desk() {
-        Scene s=new Scene("desk.png");
+        Scene s=new Scene("desk.png");s.markers=true;
         s.spot(.30,.78,.40,.11,"책상 서랍",()->say(game.obtainRod()?"낡은 점화봉을 얻었다.":"서랍은 비어 있다."));
         s.spot(.66,.57,.19,.17,"어린아이의 여섯 그림",this::clues);
         s.spot(.70,.03,.26,.53,"물약 선반 자세히 보기",this::potions);
@@ -110,7 +131,7 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
         showScene(s,true);say("먼지가 내려앉아 있다.");
     }
     private void altar() {
-        Scene s=new Scene("altar.png");s.spot(.22,.49,.56,.35,"제단",this::useAtAltar);
+        Scene s=new Scene("altar.png");s.markers=true;s.spot(.22,.49,.56,.35,"제단",this::useAtAltar);
         showScene(s,true);say("차가운 돌 위로 달빛이 흐른다.");
     }
     private JDialog popup(String title,JComponent content) {
@@ -121,9 +142,12 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
             @Override public void windowClosed(WindowEvent event) { dialogs.remove(dialog); }
         });
         JPanel body=new JPanel(new BorderLayout(8,8));body.setBackground(DARK);
-        body.add(content);body.add(button("닫기",dialog::dispose),BorderLayout.SOUTH);
+        body.add(content);if(!isInGame()) body.add(button("닫기",dialog::dispose),BorderLayout.SOUTH);   // [통합] 게임 중에는 왼쪽 위 [← 돌아가기]로 닫음
         dialog.setContentPane(body);dialog.setSize(Math.min(1100,owner.getWidth()-60),Math.min(780,owner.getHeight()-60));
         dialog.setLocationRelativeTo(this);dialog.getRootPane().registerKeyboardAction(e->dialog.dispose(),KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE,0),JComponent.WHEN_IN_FOCUSED_WINDOW);
+        if(isInGame()) {   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, 금색 테두리)
+            common.RoomPopup.style(dialog);body.setOpaque(true);body.setBorder(BorderFactory.createLineBorder(GOLD,2));
+        }
         return dialog;
     }
     private void clues() {
@@ -169,7 +193,9 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
         JLabel feedback=TextDisplay.label(" ",SwingConstants.CENTER);
         for(int i=0;i<9;i++) {int index=i;
             art.spot(.322+(i%3)*.125,.21+(i/3)*.185,.105,.145,(i/3+1)+"행 "+(i%3+1)+"열",()->{
-                String m=game.toggleSafe(index);feedback.setText(m.isEmpty()?" ":m);say(m);art.repaint();
+                int before=game.safe.count();String m=game.toggleSafe(index);
+                if(before==2 && game.safe.count()==3 && !game.state.moonCrystalObtained) reportWrongAnswer("P10");   // [통합] 금고 오답 → 체력 -1
+                feedback.setText(m.isEmpty()?" ":m);say(m);art.repaint();
             });
         }
         art.overlay=g->{for(int i=0;i<9;i++) if(game.safe.selected(i)) {
@@ -208,13 +234,94 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
             SwingUtilities.invokeLater(onComplete);
         }
     }
+    // ------------------------------------------------------------------
+    // [통합] common.RoomPanel 연결 (체력 / 힌트 / 목표 / 진행도 / 인벤토리)
+    // ------------------------------------------------------------------
+    private boolean sentRod, sentCandles, sentCrystal, sentStaff, sentCircuit;
+
+    /** 방 안의 진행 상태(GameState)가 바뀌었으면 공통 시스템에 한 번씩 알린다. */
+    private void syncWithGame() {
+        GameState s=game.state;
+        if(s.ignitionRodObtained && !sentRod) { sentRod=true; giveRoomItem(InventoryManager.Item.IGNITION_ROD); }
+        if(s.candlesSolved && !sentCandles) { sentCandles=true; reportSolved("P09"); }
+        if(s.moonCrystalObtained && !sentCrystal) { sentCrystal=true; reportSolved("P10"); giveRoomItem(InventoryManager.Item.MOON_CRYSTAL); }
+        if(s.staffCompleted && !sentStaff) {
+            sentStaff=true; reportSolved("P11");
+            if(isInGame()) { game().removeItem("R3-IGNITION_ROD"); game().removeItem("R3-MOON_CRYSTAL"); }
+            giveRoomItem(InventoryManager.Item.MOON_STAFF);
+        }
+        if(s.circuitSolved && !sentCircuit) { sentCircuit=true; reportSolved("P12"); }
+        updateProgress();
+    }
+
+    private void giveRoomItem(InventoryManager.Item item) {
+        giveItem(new common.Item("R3-"+item.name(), item.title, item.description, assets.image(item.image),
+            () -> { game.inventory.select(item); say(item.title+" — "+item.description); }));   // 가방에서 누르면 그 아이템 선택
+    }
+
+    @Override public String getRoomName() { return "혈월의 예배당"; }
+
+    @Override public common.RoomTheme getTheme() { return common.RoomTheme.BLOODMOON; }   // 검은 철 + 핏빛 UI
+
+    @Override public String getObjective() {
+        switch(getHintStage()) {
+            case 1: return "예배당을 둘러보자.\n책상 쪽에 쓸 만한 물건이 있을지도 모른다.";
+            case 2: return "점화봉을 얻었다.\n책상 위 다섯 촛불을 올바른 순서로 밝히자.";
+            case 3: return "어딘가에서 금속이 움직였다.\n새로 나타난 금고를 열자.";
+            case 4: return "점화봉과 붉은 달의 수정을 모았다.\n제단에서 두 물건을 하나로 합치자.";
+            case 5: return "붉은 달의 지팡이가 완성됐다.\n귀환문의 마력 회로를 이어 봉인을 풀자.";
+            default: return "귀환문의 봉인이 풀렸다! 최종 탈출!";
+        }
+    }
+
+    @Override public java.util.List<String> getCurrentHints() {
+        // hints.txt 의 room3 힌트를 못 읽었을 때 쓰는 기본 힌트
+        return Arrays.asList("화면의 물건을 클릭해 조사해 보세요.",
+            "아래 인벤토리 칸을 눌러 아이템을 선택한 뒤 사용할 곳을 클릭하세요.");
+    }
+
+    @Override protected String getHintRoomKey() { return "room3"; }
+
+    @Override protected int getHintStage() {
+        GameState s=game.state;
+        if(s.gameCompleted) return 6;
+        if(s.staffCompleted) return 5;
+        if(s.moonCrystalObtained) return 4;
+        if(s.candlesSolved) return 3;
+        if(s.ignitionRodObtained) return 2;
+        return 1;
+    }
+
+    /** [통합] 개발자 모드: 다음 퍼즐 하나를 바로 해결 (오답 처리 없이) */
+    @Override public boolean devSkipPuzzle() {
+        GameState s=game.state;
+        if(s.gameCompleted) return false;
+        for(JDialog dialog:new ArrayList<>(dialogs)) dialog.dispose();
+        if(!s.ignitionRodObtained) game.obtainRod();
+        else if(!s.candlesSolved) { for(int c:new int[]{2,3,5,1,4}) if(!game.candles.lit(c)) game.light(c); }
+        else if(!s.moonCrystalObtained) {
+            for(int i=0;i<9;i++) if(game.safe.selected(i) && i!=2 && i!=3 && i!=7) game.toggleSafe(i);
+            for(int i:new int[]{2,3,7}) if(!game.safe.selected(i)) game.toggleSafe(i);
+        }
+        else if(!s.staffCompleted) game.combine();
+        else { s.circuitSolved=true; s.gameCompleted=true; ending(); return true; }
+        chapel(); say("");
+        return true;
+    }
+
+    @Override public int getTotalPuzzles() { return 4; }
+    @Override public int getSolvedCount() {
+        GameState s=game.state;
+        return (s.candlesSolved?1:0)+(s.moonCrystalObtained?1:0)+(s.staffCompleted?1:0)+(s.circuitSolved?1:0);
+    }
+
     private record Hotspot(Rectangle2D bounds,String title,Runnable action) {}
     private final class Scene extends JPanel {
-        String background;Consumer<Graphics2D> overlay=g->{};final java.util.List<Hotspot> spots=new ArrayList<>();Hotspot hover;
+        String background;boolean markers;Consumer<Graphics2D> overlay=g->{};final java.util.List<Hotspot> spots=new ArrayList<>();Hotspot hover;
         Scene(String background) {
             this.background=background;setLayout(null);setBackground(Color.BLACK);setPreferredSize(new Dimension(960,540));
             MouseAdapter mouse=new MouseAdapter() {
-                @Override public void mouseMoved(MouseEvent e) {Point2D p=logical(e);hover=spots.stream().filter(s->s.bounds.contains(p)).findFirst().orElse(null);setCursor(hover==null?Cursor.getDefaultCursor():investigate);setToolTipText(TextDisplay.tooltip(hover==null?null:hover.title));repaint();}
+                @Override public void mouseMoved(MouseEvent e) {Point2D p=logical(e);Hotspot before=hover;hover=spots.stream().filter(s->s.bounds.contains(p)).findFirst().orElse(null);if(hover==before) return;setCursor(hover==null?Cursor.getDefaultCursor():investigate);setToolTipText(TextDisplay.tooltip(hover==null?null:hover.title));repaint();}   // [통합] 가리키는 지점이 바뀔 때만 다시 그림
                 @Override public void mouseExited(MouseEvent e) {hover=null;setCursor(Cursor.getDefaultCursor());repaint();}
                 @Override public void mouseClicked(MouseEvent e) {if(!SwingUtilities.isLeftMouseButton(e)) return;Point2D p=logical(e);for(Hotspot s:spots) if(s.bounds.contains(p)) {s.action.run();return;}}
             };addMouseListener(mouse);addMouseMotionListener(mouse);
@@ -239,8 +346,13 @@ public final class Room3Panel extends JPanel implements AutoCloseable {
         Point2D logical(MouseEvent e) {Rectangle2D v=viewport();return new Point2D.Double((e.getX()-v.getX())*1600/v.getWidth(),(e.getY()-v.getY())*900/v.getHeight());}
         @Override protected void paintComponent(Graphics graphics) {
             super.paintComponent(graphics);Rectangle2D v=viewport();Graphics2D g=(Graphics2D)graphics.create();g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g.translate(v.getX(),v.getY());g.scale(v.getWidth()/1600,v.getHeight()/900);g.drawImage(assets.image(background),0,0,1600,900,null);overlay.accept(g);
-            if(hover!=null) {g.setColor(new Color(240,197,116,45));g.fill(hover.bounds);g.setColor(GOLD);g.setStroke(new BasicStroke(2));g.draw(hover.bounds);}g.dispose();
+            g.translate(v.getX(),v.getY());g.scale(v.getWidth()/1600,v.getHeight()/900);common.FastImage.draw(g,assets.image(background),0,0,1600,900);overlay.accept(g);   // [통합] 배경 확대본 재사용
+            if(hover!=null && !markers) {g.setColor(new Color(240,197,116,45));g.fill(hover.bounds);g.setColor(GOLD);g.setStroke(new BasicStroke(2));g.draw(hover.bounds);}
+            if(markers) {   // [통합] 1번 방과 같은 돋보기 표시 (화면 크기와 상관없이 같은 크기)
+                double k=1600/Math.max(1,v.getWidth());
+                for(Hotspot sp:spots) common.Magnifier.paint(g,sp.bounds.getCenterX(),sp.bounds.getCenterY(),common.Magnifier.SIZE*k,sp==hover);
+            }
+            g.dispose();
         }
     }
 }

@@ -39,6 +39,8 @@ public final class AssetManager {
                 if(Files.isRegularFile(image)) return Files.newInputStream(image);
             }
         }
+        java.io.File found=common.Resources.file("resources/room3/images/"+name);   // [통합] 상위 폴더에서 실행해도 찾기
+        if(found.isFile()) return Files.newInputStream(found.toPath());
         return null;
     }
     private Path classLocation() {

@@ -35,7 +35,7 @@ EDT 비차단, 재생 반복, 자원 정리와 오디오 장치 오류 복구를
 실제 출력 장치 테스트는 다음과 같습니다. 소리가 실제로 재생됩니다.
 
 ```powershell
-javac -encoding UTF-8 --release 17 -cp src/room3/dist/BloodmoonChapel.jar -d out/test src/room3/tests/room3/SoundDeviceTest.java
+javac -encoding UTF-8 --release 17 -cp src/room3/dist/BloodmoonChapel.jar -d out/test tests/room3/SoundDeviceTest.java
 java -cp "src/room3/dist/BloodmoonChapel.jar;out/test" room3.SoundDeviceTest
 ```
 

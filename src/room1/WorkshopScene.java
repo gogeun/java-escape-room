@@ -55,15 +55,15 @@ final class WorkshopScene extends JPanel {
                         cx = getWidth() * 4 / 5;
                         cy = getHeight() * 3 / 7;
                     }
-                    g.drawImage(active ? magnifierHover : magnifier, cx-14, cy-14, 28, 28, null);
+                    g.drawImage(active ? magnifierHover : magnifier, cx-17, cy-17, 34, 34, null);   // [통합] 돋보기 크기 34px (세 방 공통)
                     if (active) {
                         g.setFont(Brass.font(Font.BOLD, 14));
                         int width = g.getFontMetrics().stringWidth(getText()) + 14;
                         int left = Math.max(0, Math.min(getWidth()-width, cx-width/2));
                         g.setColor(Brass.INK);
-                        g.fillRoundRect(left, cy+16, width, 25, 7, 7);
+                        g.fillRoundRect(left, cy+19, width, 25, 7, 7);
                         g.setColor(Brass.CREAM);
-                        g.drawString(getText(), left+7, cy+34);
+                        g.drawString(getText(), left+7, cy+37);
                     }
                     g.dispose();
                 }
@@ -162,7 +162,7 @@ final class WorkshopScene extends JPanel {
             g.translate(-640 + 7 * impactStrength * Math.sin(impactPhase * 43),
                         -360 + 4.7 * impactStrength * Math.sin(impactPhase * 56));
         }
-        g.drawImage(workshop, 0, 0, 1280, 720, null);
+        common.FastImage.draw(g, workshop, 0, 0, 1280, 720);   // [통합] 배경 확대본 재사용 (매 프레임 확대하지 않음)
         if (handleInstalled) PressureInstrument.drawMountedWheel(g, 557.5, 382, 54, handleTurns);
         Composite opaque = g.getComposite();
         if (openingProgress < .3) g.setComposite(AlphaComposite.SrcOver.derive((float)(openingProgress / .3)));

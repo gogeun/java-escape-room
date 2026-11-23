@@ -95,6 +95,11 @@ final class RoomProgress {
         return false;
     }
 
+    // [통합] 개발자 모드용: 퍼즐 단계를 바로 완료 상태로 만든다
+    void devInstall() { inventory.add(Item.HANDLE); handleInstalled = true; }
+    void devSolveValve() { devInstall(); turns = TARGET_TURNS; solved = Math.max(solved, 1); }
+    void devFinishStop() { inventory.add(Item.TAG); step = PROCEDURE.length; solved = 2; }
+
     Response operate(Command command) {
         if (!ready(Station.STOP) || engaged(command)) return Response.INACTIVE;
         if (command != PROCEDURE[step]) {

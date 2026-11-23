@@ -12,7 +12,7 @@ public class RoyalPassDialog extends JDialog {
         setResizable(false);
 
         JPanel panel = new JPanel() {
-            private Image passImg = new ImageIcon("resources/room2/왕실_인증패.png").getImage();
+            private Image passImg = new ImageIcon(common.Resources.path("resources/room2/왕실_인증패.png")).getImage();
             private Font titleFont = new Font("바탕", Font.BOLD, 17);
             private Font clueFont = new Font("바탕", Font.BOLD, 16);
 
@@ -24,8 +24,10 @@ public class RoyalPassDialog extends JDialog {
                 g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
-                g2d.setColor(new Color(25, 20, 18));
-                g2d.fillRect(0, 0, getWidth(), getHeight());
+                if (!isUndecorated()) {   // [통합] 테두리 없는 팝업일 때는 배경을 칠하지 않아 그림만 보이게
+                    g2d.setColor(new Color(25, 20, 18));
+                    g2d.fillRect(0, 0, getWidth(), getHeight());
+                }
 
                 if (passImg != null) {
                     g2d.drawImage(passImg, 0, 0, getWidth(), getHeight(), this);
@@ -40,8 +42,8 @@ public class RoyalPassDialog extends JDialog {
                     "⑤ 장미가 있으면 왕관도 있다."
                 };
 
-                int startY = 232;   // 인증패 내 빈 양피지 영역 시작 Y좌표
-                int lineHeight = 25; // 줄 간격
+                int lineHeight = Math.round(getHeight() * 0.054f);       // 줄 간격 ([통합] 창 높이에 맞춰 비율로)
+                int startY = Math.round(getHeight() * 0.585f) - lineHeight;   // 인증패 내 빈 양피지 영역 시작 Y좌표 (첫 줄은 빈 줄)
 
                 for (int i = 0; i < lines.length; i++) {
                     String line = lines[i];
@@ -64,5 +66,6 @@ public class RoyalPassDialog extends JDialog {
         };
 
         add(panel);
+        common.RoomPopup.style(this);   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, ← 돌아가기 / ESC 로 닫기)
     }
 }

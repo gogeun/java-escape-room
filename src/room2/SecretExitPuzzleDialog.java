@@ -121,6 +121,7 @@ public class SecretExitPuzzleDialog extends JDialog {
         puzzlePanel.add(noteBtn);
 
         add(puzzlePanel);
+        common.RoomPopup.style(this);   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, ← 돌아가기 / ESC 로 닫기)
     }
 
     private Rectangle getDoorRect(int index, int panelW, int panelH) {
@@ -155,18 +156,14 @@ public class SecretExitPuzzleDialog extends JDialog {
         if ("북쪽 문".equals(selectedDoor)) {
             parentRoom.setSecretExitOpened(true);
 
-            JOptionPane.showMessageDialog(
-                this,
-                "철컥- 쿠구궁!\n" +
+            common.DialogBox.message(this, "기사의 비밀 출구 개방 (정답)", "철컥- 쿠구궁!\n" +
                 "[기사 임명장]과 [늑대 문장 열쇠]를 사용해 북쪽 비밀 출구를 열었습니다!\n" +
-                "열린 북쪽 통로를 따라 3번 방으로 이동합니다.",
-                "기사의 비밀 출구 개방 (정답)",
-                JOptionPane.INFORMATION_MESSAGE
-            );
+                "열린 북쪽 통로를 따라 3번 방으로 이동합니다.");
 
             dispose();
             parentRoom.moveToRoom3();
         } else {
+            parentRoom.onPuzzleFailed("P08"); // [통합] 오답 → 체력 감소
             String failReason;
             if ("동쪽 문".equals(selectedDoor)) {
                 failReason = "동쪽 문 너머는 무기고라 밖으로 나갈 수 없습니다.";
@@ -176,12 +173,7 @@ public class SecretExitPuzzleDialog extends JDialog {
                 failReason = "남쪽 문 너머 통로는 무너져 내려 지나갈 수 없습니다.";
             }
 
-            JOptionPane.showMessageDialog(
-                this,
-                failReason + "\n늑대 갑옷 속 쪽지의 단서를 다시 확인해 보세요.",
-                "잘못된 출구 선택",
-                JOptionPane.WARNING_MESSAGE
-            );
+            common.DialogBox.message(this, "잘못된 출구 선택", failReason + "\n늑대 갑옷 속 쪽지의 단서를 다시 확인해 보세요.");
         }
     }
 }

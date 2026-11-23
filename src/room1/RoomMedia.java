@@ -36,7 +36,7 @@ final class RoomMedia {
             }
             return resource;
         }
-        Path file = Path.of("resources", "room1", name);
+        Path file = common.Resources.file("resources/room1/" + name).toPath();   // [통합] 실행 폴더와 상관없이 찾기
         if (Files.isRegularFile(file)) return file.toUri().toURL();
         throw new IOException("resources/room1/" + name);
     }

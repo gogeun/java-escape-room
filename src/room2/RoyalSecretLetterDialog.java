@@ -12,7 +12,7 @@ public class RoyalSecretLetterDialog extends JDialog {
         setResizable(false);
 
         JPanel panel = new JPanel() {
-            private Image parchmentImg = new ImageIcon("resources/room2/왕위_계승_기록.png").getImage();
+            private Image parchmentImg = new ImageIcon(common.Resources.path("resources/room2/왕위_계승_기록.png")).getImage();
             private Font titleFont = new Font("바탕", Font.BOLD, 24);
             private Font bodyFont = new Font("바탕", Font.BOLD, 17);
 
@@ -79,5 +79,6 @@ public class RoyalSecretLetterDialog extends JDialog {
         };
 
         add(panel);
+        common.RoomPopup.style(this);   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, ← 돌아가기 / ESC 로 닫기)
     }
 }

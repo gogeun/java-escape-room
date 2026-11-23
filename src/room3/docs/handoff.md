@@ -29,12 +29,13 @@
 - `src/common`, `src/room1`, `src/room2`, `src/room3`는 처음부터 있던 방별 패키지 구조입니다.
 - Room 3는 다른 담당자의 파일과 충돌하지 않도록 `room3` 패키지 내부에서 구현했습니다.
 - `puzzles`는 화면 코드와 정답 판정을 분리하기 위한 하위 패키지입니다.
-- `docs`, `tests`, 빌드 스크립트와 `dist`를 `src/room3` 안에 둔 것은 Room 3 추가 파일을 그 안에 모아 달라는 프로젝트 관리 방침에 따른 것입니다.
+- `docs`, 빌드 스크립트와 `dist`를 `src/room3` 안에 둔 것은 Room 3 추가 파일을 그 안에 모아 달라는 프로젝트 관리 방침에 따른 것입니다.
   Java가 요구하는 구조는 아니며, 일반적인 소스 전용 디렉터리와는 다릅니다.
-- 테스트의 `tests/room3`에서 바깥 `tests`는 테스트 소스 루트, 안쪽 `room3`는 Java 패키지입니다.
+- 테스트는 프로젝트 루트의 `tests/room3`에 있습니다. 바깥 `tests`는 테스트 소스 루트, 안쪽 `room3`는 Java 패키지입니다.
+  (VS Code는 `src` 전체를 게임 소스 루트로 보므로, 테스트는 패키지 이름이 맞도록 `src` 밖에 둡니다.)
   패키지 내부 동작을 검증하기 위해 게임 코드와 같은 `package room3`를 사용합니다.
-- IDE에서 게임 소스 루트는 `src`, 테스트 소스 루트는 `src/room3/tests`입니다. `src/room3` 자체를 게임 소스 루트로 설정하지 마세요.
-- `src/room3/tests`와 `src/room3/dist`는 운영 코드 컴파일 대상에서 제외합니다. 제공된 빌드 스크립트에 제외 규칙이 있습니다.
+- IDE에서 게임 소스 루트는 `src`, 테스트 소스 루트는 `tests`입니다. `src/room3` 자체를 게임 소스 루트로 설정하지 마세요.
+- `src/room3/dist`는 운영 코드 컴파일 대상에서 제외합니다. 제공된 빌드 스크립트에 제외 규칙이 있습니다. (테스트는 `src` 밖에 있어 자동으로 제외됨)
 - 클래스 파일·검사 미리보기는 루트 `out/`, 배포 산출물은 `src/room3/dist/`에 생성하며 둘 다 Git 제외 대상입니다.
 - 추후 팀 공통 빌드 규약이 생기면 테스트·문서·배포 폴더를 분리할 수 있습니다. 그때 빌드·실행·문서 경로도 함께 수정해야 합니다.
 
@@ -58,7 +59,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File src/room3/test.ps1
 java -jar src/room3/dist/BloodmoonChapel.jar
 
 # 공통 창의 CardLayout에 넣어 전체 진행·완료 콜백·재진입을 검증
-javac -encoding UTF-8 --release 17 -cp src/room3/dist/BloodmoonChapel.jar -d out/test src/room3/tests/room3/GuiTest.java
+javac -encoding UTF-8 --release 17 -cp src/room3/dist/BloodmoonChapel.jar -d out/test tests/room3/GuiTest.java
 java -cp "src/room3/dist/BloodmoonChapel.jar;out/test" room3.GuiTest
 ```
 

@@ -136,11 +136,12 @@ public class PortraitPuzzleDialog extends JDialog {
         });
 
         add(puzzlePanel);
+        common.RoomPopup.style(this);   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, ← 돌아가기 / ESC 로 닫기)
     }
 
     private void handlePortraitClick(int portraitNumber) {
         if (parentRoom.hasRoyalPass()) {
-            JOptionPane.showMessageDialog(this, "이미 초상화 장치가 해제되어 [왕실 인증패]를 획득했습니다.");
+            common.DialogBox.message(this, "알림", "이미 초상화 장치가 해제되어 [왕실 인증패]를 획득했습니다.");
             return;
         }
 
@@ -160,23 +161,14 @@ public class PortraitPuzzleDialog extends JDialog {
         if (currentInput.equals(answerSequence1) || currentInput.equals(answerSequence2)) {
             parentRoom.setRoyalPassAcquired(true);
 
-            JOptionPane.showMessageDialog(
-                this,
-                "철컥- 소리와 함께 초상화 아래 비밀 벽감이 열렸습니다!\n[왕실 인증패]를 획득했습니다.",
-                "퍼즐 해결",
-                JOptionPane.INFORMATION_MESSAGE
-            );
+            common.DialogBox.message(this, "퍼즐 해결", "철컥- 소리와 함께 초상화 아래 비밀 벽감이 열렸습니다!\n[왕실 인증패]를 획득했습니다.");
 
             Window owner = getOwner();
             dispose();
             new RoyalPassDialog(owner).setVisible(true);
         } else {
-            JOptionPane.showMessageDialog(
-                this,
-                "초상화 뒤에서 둔탁한 소리가 나며 장치가 초기화되었습니다.\n기록의 계승 순서를 다시 확인해 보세요.",
-                "장치 초기화",
-                JOptionPane.WARNING_MESSAGE
-            );
+            parentRoom.onPuzzleFailed("P05"); // [통합] 오답 → 체력 감소
+            common.DialogBox.message(this, "장치 초기화", "초상화 뒤에서 둔탁한 소리가 나며 장치가 초기화되었습니다.\n기록의 계승 순서를 다시 확인해 보세요.");
 
             currentInput.clear();
             puzzlePanel.repaint();

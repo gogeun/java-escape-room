@@ -38,3 +38,6 @@ basic.txt
 # Room 3 generated packages (JAR, bundled runtime, Windows launcher)
 /src/room3/dist/
 /src/room3/run.bat
+
+# 게임 실행 데이터 (저장/랭킹/설정)
+data/

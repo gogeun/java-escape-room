@@ -143,10 +143,7 @@ public class RoyalCrestPuzzleDialog extends JDialog {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (parentRoom.hasRoyalSecretLetter()) {
-                    JOptionPane.showMessageDialog(
-                        RoyalCrestPuzzleDialog.this,
-                        "이미 문장 보관함이 열려 [왕의 밀서]를 획득했습니다."
-                    );
+                    common.DialogBox.message(RoyalCrestPuzzleDialog.this, "알림", "이미 문장 보관함이 열려 [왕의 밀서]를 획득했습니다.");
                     return;
                 }
 
@@ -234,6 +231,7 @@ public class RoyalCrestPuzzleDialog extends JDialog {
         puzzlePanel.add(viewPassBtn);
 
         add(puzzlePanel);
+        common.RoomPopup.style(this);   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, ← 돌아가기 / ESC 로 닫기)
     }
 
     private int findTargetSlot(Point pt, int panelW, int panelH) {
@@ -312,7 +310,7 @@ public class RoyalCrestPuzzleDialog extends JDialog {
         };
 
         for (String path : candidatePaths) {
-            File file = new File(path);
+            File file = common.Resources.file(path);   // [통합] 실행 폴더와 상관없이 찾기
             if (file.exists()) {
                 try {
                     bgImg = ImageIO.read(file);
@@ -334,7 +332,7 @@ public class RoyalCrestPuzzleDialog extends JDialog {
                 }
             }
         }
-        loadedPathInfo = new File("resources/room2/왕가의_문장_퍼즐.png").getAbsolutePath();
+        loadedPathInfo = common.Resources.file("resources/room2/왕가의_문장_퍼즐.png").getAbsolutePath();
     }
 
     private boolean isPieceUsed(int pieceIdx) {
@@ -371,23 +369,14 @@ public class RoyalCrestPuzzleDialog extends JDialog {
         if (playerSet.equals(answerSet)) {
             parentRoom.setRoyalSecretLetterAcquired(true);
 
-            JOptionPane.showMessageDialog(
-                this,
-                "철컥! 사자, 왕관, 장미 문장이 홈에 정확히 맞물리며 보관함이 열렸습니다!\n보관함 안에서 [왕의 밀서]를 획득했습니다. 밀서의 내용을 확인합니다.",
-                "진짜 왕가의 문장 해결",
-                JOptionPane.INFORMATION_MESSAGE
-            );
+            common.DialogBox.message(this, "진짜 왕가의 문장 해결", "철컥! 사자, 왕관, 장미 문장이 홈에 정확히 맞물리며 보관함이 열렸습니다!\n보관함 안에서 [왕의 밀서]를 획득했습니다. 밀서의 내용을 확인합니다.");
 
             Window owner = getOwner();
             dispose();
             new RoyalSecretLetterDialog(owner).setVisible(true);
         } else {
-            JOptionPane.showMessageDialog(
-                this,
-                "문장 조각들이 서로 밀어내며 홈에서 튕겨 나왔습니다.\n인증패 뒷면의 기록을 다시 확인해 보세요.",
-                "조합 실패",
-                JOptionPane.WARNING_MESSAGE
-            );
+            parentRoom.onPuzzleFailed("P06"); // [통합] 오답 → 체력 감소
+            common.DialogBox.message(this, "조합 실패", "문장 조각들이 서로 밀어내며 홈에서 튕겨 나왔습니다.\n인증패 뒷면의 기록을 다시 확인해 보세요.");
 
             Arrays.fill(slotPieces, -1);
             puzzlePanel.repaint();

@@ -36,6 +36,7 @@ public final class BookStartPanel extends JPanel {
     private BufferedImage motionCanvas;
     private int latePaints;
     private boolean fastEnlargement;
+    private Runnable onEntering;   // [통합] 명부에 서명해 들어가기 시작할 때 (시작 화면 메뉴를 숨김)
 
     public BookStartPanel(Consumer<String> onEnter) {
         this.onEnter = Objects.requireNonNull(onEnter);
@@ -76,11 +77,14 @@ public final class BookStartPanel extends JPanel {
         });
     }
 
+    /** [통합] 서명 후 그림 속으로 들어가기 시작할 때 실행할 동작 */
+    public void setOnEntering(Runnable action) { onEntering = action; }
+
     private static BufferedImage readImage(String filename) {
         URL file = BookStartPanel.class.getResource("/common/" + filename);
         try {
             if (file != null) return ImageIO.read(file);
-            Path image = Path.of("resources", "common", filename);
+            Path image = Resources.file("resources/common/" + filename).toPath();   // [통합] 실행 폴더와 상관없이 찾기
             return Files.isRegularFile(image) ? ImageIO.read(image.toFile()) : null;
         } catch (IOException ignored) {
             return null;
@@ -128,6 +132,7 @@ public final class BookStartPanel extends JPanel {
 
     private void transition(Scene next) {
         scene = next;
+        if (next == Scene.ENTERING && onEntering != null) onEntering.run();
         elapsed = 0;
         latePaints = 0;
         fastEnlargement = false;

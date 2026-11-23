@@ -56,6 +56,10 @@ public final class SoundManager implements AutoCloseable {
     }
     private static Clip load(String name) throws Exception {
         var resource=SoundManager.class.getResource("/room3/sounds/"+name+".wav");
+        if(resource==null) {   // [통합] 클래스패스에 없으면 resources 폴더에서 찾기
+            java.io.File file=common.Resources.file("resources/room3/sounds/"+name+".wav");
+            if(file.isFile()) resource=file.toURI().toURL();
+        }
         if(resource==null) throw new java.io.FileNotFoundException(name+".wav");
         try(AudioInputStream stream=AudioSystem.getAudioInputStream(resource)) {
             Clip clip=AudioSystem.getClip();

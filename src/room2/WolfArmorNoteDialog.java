@@ -27,8 +27,10 @@ public class WolfArmorNoteDialog extends JDialog {
                 g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
-                g2d.setColor(new Color(25, 20, 18));
-                g2d.fillRect(0, 0, getWidth(), getHeight());
+                if (!isUndecorated()) {   // [통합] 테두리 없는 팝업일 때는 배경을 칠하지 않아 그림만 보이게
+                    g2d.setColor(new Color(25, 20, 18));
+                    g2d.fillRect(0, 0, getWidth(), getHeight());
+                }
 
                 if (noteImg != null) {
                     g2d.drawImage(noteImg, 0, 0, getWidth(), getHeight(), this);
@@ -77,5 +79,6 @@ public class WolfArmorNoteDialog extends JDialog {
         panel.add(closeBtn);
 
         add(panel);
+        common.RoomPopup.style(this);   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, ← 돌아가기 / ESC 로 닫기)
     }
 }

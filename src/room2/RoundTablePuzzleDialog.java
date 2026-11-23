@@ -155,10 +155,7 @@ public class RoundTablePuzzleDialog extends JDialog {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (parentRoom.hasWolfKey()) {
-                    JOptionPane.showMessageDialog(
-                        RoundTablePuzzleDialog.this,
-                        "이미 원탁의 퍼즐을 해결하여 [기사 임명장]과 [늑대 문장 열쇠]를 획득했습니다."
-                    );
+                    common.DialogBox.message(RoundTablePuzzleDialog.this, "알림", "이미 원탁의 퍼즐을 해결하여 [기사 임명장]과 [늑대 문장 열쇠]를 획득했습니다.");
                     return;
                 }
 
@@ -256,6 +253,7 @@ public class RoundTablePuzzleDialog extends JDialog {
         puzzlePanel.add(viewLetterBtn);
 
         add(puzzlePanel);
+        common.RoomPopup.style(this);   // [통합] 창 테두리 없이 방 화면 위에 뜨는 팝업 (뒤 화면 어둡게, ← 돌아가기 / ESC 로 닫기)
     }
 
     // 파일명에 '_2'가 붙은 경우와 기본 이름 모두 자동으로 탐색하여 로드 및 방패 크롭
@@ -267,7 +265,7 @@ public class RoundTablePuzzleDialog extends JDialog {
             "resources/room2/원탁의 기사 자리배치 퍼즐.png"
         };
         for (String path : candidates) {
-            File f = new File(path);
+            File f = common.Resources.file(path);   // [통합] 실행 폴더와 상관없이 찾기
             if (f.exists()) {
                 try {
                     bgImg = ImageIO.read(f);
@@ -289,7 +287,7 @@ public class RoundTablePuzzleDialog extends JDialog {
                 }
             }
         }
-        missingPathInfo = new File("resources/room2/원탁의_기사_자리배치_퍼즐.png").getAbsolutePath();
+        missingPathInfo = common.Resources.file("resources/room2/원탁의_기사_자리배치_퍼즐.png").getAbsolutePath();
     }
 
     // 방패 외형(다각형 실루엣) 생성
@@ -391,25 +389,16 @@ public class RoundTablePuzzleDialog extends JDialog {
         if (Arrays.equals(currentSeats, answerSeats)) {
             parentRoom.setKnightPuzzleSolved(true);
 
-            JOptionPane.showMessageDialog(
-                this,
-                "철컥-! 다섯 기사의 문장 방패가 원탁의 각 자리에 맞물렸습니다.\n" +
+            common.DialogBox.message(this, "원탁의 빈자리 해결", "철컥-! 다섯 기사의 문장 방패가 원탁의 각 자리에 맞물렸습니다.\n" +
                 "왕좌와 마주 보는 6시 방향 [늑대]의 자리 아래에서\n" +
-                "[기사 임명장]과 [늑대 문장 열쇠]를 획득했습니다!",
-                "원탁의 빈자리 해결",
-                JOptionPane.INFORMATION_MESSAGE
-            );
+                "[기사 임명장]과 [늑대 문장 열쇠]를 획득했습니다!");
 
             Window owner = getOwner();
             dispose();
             new KnightRewardDialog(owner).setVisible(true);
         } else {
-            JOptionPane.showMessageDialog(
-                this,
-                "문장 방패들이 서로 밀어내며 자리에서 튕겨 나왔습니다.\n[왕의 밀서]의 자리 조건을 다시 확인해 보세요.",
-                "배치 실패",
-                JOptionPane.WARNING_MESSAGE
-            );
+            parentRoom.onPuzzleFailed("P07"); // [통합] 오답 → 체력 감소
+            common.DialogBox.message(this, "배치 실패", "문장 방패들이 서로 밀어내며 자리에서 튕겨 나왔습니다.\n[왕의 밀서]의 자리 조건을 다시 확인해 보세요.");
 
             Arrays.fill(currentSeats, -1);
             puzzlePanel.repaint();
