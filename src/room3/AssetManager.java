@@ -24,5 +24,27 @@ public final class AssetManager {
             }
         });
     }
+    private InputStream openImage(String name) throws IOException {
+        InputStream resource=AssetManager.class.getResourceAsStream("/room3/images/"+name);
+        if(resource!=null) return resource;
+        // IDE runs often compile classes without copying the project's resources.
+        if(!Path.of(name).getFileName().toString().equals(name)) return null;
+        Path[] starts={Path.of("").toAbsolutePath(), classLocation()};
+        for(Path start:starts) {
+            for(Path dir=start;dir!=null;dir=dir.getParent()) {
+                Path image=dir.resolve("resources").resolve("room3").resolve("images").resolve(name);
+                if(Files.isRegularFile(image)) return Files.newInputStream(image);
+            }
+        }
+        return null;
+    }
+    private Path classLocation() {
+        try {
+            Path location=Path.of(AssetManager.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            return Files.isDirectory(location)?location:location.getParent();
+        } catch(Exception e) {
+            return null;
+        }
+    }
     public Set<String> missing() { return Set.copyOf(missing); }
 }
