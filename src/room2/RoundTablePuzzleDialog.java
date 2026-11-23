@@ -267,7 +267,7 @@ public class RoundTablePuzzleDialog extends JDialog {
             "resources/room2/원탁의 기사 자리배치 퍼즐.png"
         };
         for (String path : candidates) {
-            File f = new File(path);
+            File f = common.Resources.file(path);
             if (f.exists()) {
                 try {
                     bgImg = ImageIO.read(f);
@@ -289,7 +289,7 @@ public class RoundTablePuzzleDialog extends JDialog {
                 }
             }
         }
-        missingPathInfo = new File("resources/room2/원탁의_기사_자리배치_퍼즐.png").getAbsolutePath();
+        missingPathInfo = common.Resources.file("resources/room2/원탁의_기사_자리배치_퍼즐.png").getAbsolutePath();
     }
 
     // 방패 외형(다각형 실루엣) 생성
@@ -404,6 +404,7 @@ public class RoundTablePuzzleDialog extends JDialog {
             dispose();
             new KnightRewardDialog(owner).setVisible(true);
         } else {
+            parentRoom.onPuzzleFailed("P07"); // 오답 → 체력 감소
             JOptionPane.showMessageDialog(
                 this,
                 "문장 방패들이 서로 밀어내며 자리에서 튕겨 나왔습니다.\n[왕의 밀서]의 자리 조건을 다시 확인해 보세요.",

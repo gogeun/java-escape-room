@@ -12,7 +12,7 @@ public class ScrollPopupDialog extends JDialog {
         setResizable(false);
 
         JPanel popupPanel = new JPanel() {
-            private Image popupImg = new ImageIcon("resources/room2/왕위_계승_기록.png").getImage();
+            private Image popupImg = new ImageIcon(common.Resources.path("resources/room2/왕위_계승_기록.png")).getImage();
             private Font titleFont = new Font("바탕", Font.BOLD, 25);
             private Font bodyFont = new Font("바탕", Font.BOLD, 22);
 
@@ -39,14 +39,14 @@ public class ScrollPopupDialog extends JDialog {
                     "넘기지는 못했다."
                 };
 
-                int startY = 230; 
-                int lineHeight = 42;
+                int startY = 230;   // 상단 왕관 문장 바로 아래부터 시작
+                int lineHeight = 42; // 넉넉한 줄 간격
 
                 for (int i = 0; i < lines.length; i++) {
                     String line = lines[i];
                     if (line.isEmpty()) continue;
 
-                    // 제목 크게 설정
+                    // 첫 줄(제목)은 조금 더 크게 설정
                     g2d.setFont(i == 0 ? titleFont : bodyFont);
                     FontMetrics fm = g2d.getFontMetrics();
 
@@ -58,7 +58,7 @@ public class ScrollPopupDialog extends JDialog {
                     g2d.setColor(new Color(90, 60, 35, 70));
                     g2d.drawString(line, startX + 1, currentY + 1);
 
-                    // 본문 짙은 갈색 설정
+                    // 본문 잉크 색상 (짙은 갈색)
                     g2d.setColor(new Color(40, 25, 15));
                     g2d.drawString(line, startX, currentY);
                 }

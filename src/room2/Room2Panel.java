@@ -1,11 +1,17 @@
 package room2;
 
+import common.Item;
+import common.RoomPanel;
+
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Properties;
 
-public class Room2Panel extends JPanel {
+public class Room2Panel extends RoomPanel {
     private Image backgroundImage;
 
     private boolean hasRoyalPass = false;          // I07 왕실 인증패 보유 여부
@@ -13,22 +19,14 @@ public class Room2Panel extends JPanel {
     private boolean hasKnightCertificate = false;  // I09 기사 임명장 보유 여부
     private boolean hasWolfKey = false;            // I10 늑대 문장 열쇠 보유 여부
     private boolean isArmorNoteRead = false;       // O10 늑대 갑옷 속 쪽지 확인 여부
-    private boolean isSecretExitOpened = false;    // 북쪽 비밀 출구 개방 여부
+    private boolean isSecretExitOpened = false;    // P08 북쪽 비밀 출구 개방 여부
 
-    // --- [하단 8칸 정사각형 인벤토리 관련 필드] ---
-    private static final int INV_COLS = 8;
-    private static final int INV_GAP = 12;
-    private static final int INV_MARGIN_X = 24;
-    private static final int INV_SLOT_SIZE = (1280 - (INV_MARGIN_X * 2) - (INV_GAP * (INV_COLS - 1))) / INV_COLS; // 143px
-    private static final int INV_Y = 720 - INV_SLOT_SIZE - 15; // 562px
+    private JButton passItemButton;   // 왕실 인증패 다시보기 버튼
+    private JButton letterItemButton; // 왕의 밀서 다시보기 버튼
+    private JButton certItemButton;   // 기사 임명장 & 늑대 열쇠 다시보기 버튼
+    private JButton armorNoteButton;  // 늑대 갑옷 쪽지 & 출구 안내도 다시보기 버튼
 
-    private final JButton[] inventorySlots = new JButton[INV_COLS];
-    private final String[] inventoryItemIds = new String[INV_COLS];
-
-    // --- [우측 상단 음소거 버튼 관련 필드] ---
-    private JButton soundButton;
-    private boolean muted = Boolean.getBoolean("skyborne.mute");
-
+    // 3번 방으로 화면을 전환할 때 사용할 콜백 (메인 프레임에서 연결 가능)
     private Runnable onMoveToRoom3Callback;
 
     public Room2Panel() {
@@ -43,21 +41,20 @@ public class Room2Panel extends JPanel {
 
         backgroundImage = loadRoomImage("중세방_전체배경");
 
-        initScrollClueButton();      // 1. 좌측 하단 독서대 단서 열람
-        initPortraitCabinetButton(); // 2. 좌측 벽면 초상화 장식장 (단순 클릭 -> 왕실 인증패 즉시 획득)
-        initCrestBoxButton();        // 3. [퍼즐 1] P06 중앙 좌측 벽면 문장 보관함(방패) 퍼즐
-        initRoundTableButton();      // 4. [퍼즐 2] P07 중앙 원탁의 빈자리 퍼즐
-        initKnightArmorButton();     // 5. 우측 기사 갑옷 (단순 클릭 -> 갑옷 속 쪽지 즉시 획득)
-        initExitMapButton();         // 6. 우측 벽면 출구 안내도 (단순 클릭 -> 비밀 출구 개방 및 3번 방 이동)
-        initSoundButton();           // 7. 우측 상단 음소거 버튼
-        initInventoryBar();          // 8. 하단 1줄 8칸 정사각형 인벤토리 바
+        initScrollClueButton();      // 1. 좌측 하단 독서대 단서
+        initPortraitCabinetButton(); // 2. P05 좌측 벽면 왕 초상화 퍼즐
+        initCrestBoxButton();        // 3. P06 중앙 좌측 벽면 문장 보관함(방패) 퍼즐
+        initRoundTableButton();      // 4. P07 중앙 원탁의 빈자리 퍼즐
+        initKnightArmorButton();     // 5. P08 우측 기사 갑옷(O10) -> 출구 안내도(O11) 퍼즐
+        initExitMapButton();         // 6. P08 우측 벽면 출구 안내도(O11) 직접 클릭 영역
+        initItemViewerButtons();     // 7. 우측 하단 획득 아이템 확인 버튼들
     }
 
-    // .png 및 기타 확장자 지원
+    // .png 우선 로드 (.jpg 폴백 지원)
     public static Image loadRoomImage(String baseName) {
         String[] exts = {".png", ".jpg", ".jpeg"};
         for (String ext : exts) {
-            File f = new File("resources/room2/" + baseName + ext);
+            File f = common.Resources.file("resources/room2/" + baseName + ext);
             if (f.exists()) {
                 try {
                     return ImageIO.read(f);
@@ -65,13 +62,15 @@ public class Room2Panel extends JPanel {
                 }
             }
         }
+        System.err.println("[이미지 없음] " + common.Resources.file("resources/room2/" + baseName + ".png").getAbsolutePath());
         return null;
     }
 
-private void initScrollClueButton() {
+    // 1. 좌측 하단 독서대(두루마리) 클릭 영역
+    private void initScrollClueButton() {
         JButton scrollButton = new JButton();
-        scrollButton.setBounds(55, 305, 145, 75);
-        makeMagnifierButton(scrollButton);
+        scrollButton.setBounds(45, 295, 145, 215);
+        makeTransparent(scrollButton);
 
         scrollButton.addActionListener(e -> {
             Window parentWindow = SwingUtilities.getWindowAncestor(this);
@@ -81,33 +80,25 @@ private void initScrollClueButton() {
         add(scrollButton);
     }
 
-    // 2. 좌측 벽면 초상화 장식장 클릭 영역 (P05 퍼즐 제거 -> 클릭 시 즉시 왕실 인증패 획득)
+    // 2. 좌측 벽면 초상화 장식장 클릭 영역 (P05 첫 번째 퍼즐)
     private void initPortraitCabinetButton() {
         JButton portraitCabinetBtn = new JButton();
         portraitCabinetBtn.setBounds(160, 150, 175, 125);
-        makeMagnifierButton(portraitCabinetBtn);
+        makeTransparent(portraitCabinetBtn);
+
         portraitCabinetBtn.addActionListener(e -> {
             Window parentWindow = SwingUtilities.getWindowAncestor(this);
-            if (!hasRoyalPass) {
-                setRoyalPassAcquired(true);
-                JOptionPane.showMessageDialog(
-                    this,
-                    "역대 왕들의 초상화 장식장 아래 비밀 홈에서\n[왕실 인증패]를 발견했습니다!",
-                    "단서 획득",
-                    JOptionPane.INFORMATION_MESSAGE
-                );
-            }
-            new RoyalPassDialog(parentWindow).setVisible(true);
+            new PortraitPuzzleDialog(parentWindow, this).setVisible(true);
         });
 
         add(portraitCabinetBtn);
     }
 
-    // 3. 벽면 붉은 방패 모양 '문장 보관함(O08)' 클릭 영역 ([퍼즐 1] P06)
+    // 3. 벽면 붉은 방패 모양 '문장 보관함(O08)' 클릭 영역 (P06 두 번째 퍼즐)
     private void initCrestBoxButton() {
         JButton crestBoxBtn = new JButton();
         crestBoxBtn.setBounds(340, 35, 210, 245);
-        makeMagnifierButton(crestBoxBtn);
+        makeTransparent(crestBoxBtn);
 
         crestBoxBtn.addActionListener(e -> {
             if (!hasRoyalPass) {
@@ -127,11 +118,11 @@ private void initScrollClueButton() {
         add(crestBoxBtn);
     }
 
-    // 4. 방 중앙 '원탁과 의자들(O09)' 클릭 영역 ([퍼즐 2] P07)
+    // 4. 방 중앙 '원탁과 의자들(O09)' 클릭 영역 (P07 세 번째 퍼즐)
     private void initRoundTableButton() {
         JButton roundTableBtn = new JButton();
         roundTableBtn.setBounds(350, 300, 540, 230);
-        makeMagnifierButton(roundTableBtn);
+        makeTransparent(roundTableBtn);
 
         roundTableBtn.addActionListener(e -> {
             if (!hasRoyalSecretLetter) {
@@ -151,10 +142,12 @@ private void initScrollClueButton() {
         add(roundTableBtn);
     }
 
+    // 5. 방 우측 '기사 갑옷(O10)' 클릭 영역 (P08 네 번째 퍼즐: 늑대 갑옷 속 쪽지 -> 출구 안내도)
     private void initKnightArmorButton() {
         JButton armorBtn = new JButton();
-        armorBtn.setBounds(800, 175, 255, 195);
-        makeMagnifierButton(armorBtn);
+        // 우측에 서 있는 기사 갑옷들 영역
+        armorBtn.setBounds(895, 190, 340, 310);
+        makeTransparent(armorBtn);
 
         armorBtn.addActionListener(e -> {
             if (!hasKnightCertificate || !hasWolfKey) {
@@ -169,16 +162,7 @@ private void initScrollClueButton() {
                 return;
             }
 
-            if (!isArmorNoteRead) {
-                isArmorNoteRead = true;
-                addItemToInventory("ARMOR_NOTE", "갑옷 속 쪽지", "갑옷_속_쪽지");
-                JOptionPane.showMessageDialog(
-                    this,
-                    "[늑대 문장 열쇠]로 갑옷의 가슴판을 열었습니다.\n안쪽에서 [갑옷 속 쪽지]를 발견했습니다!",
-                    "단서 획득",
-                    JOptionPane.INFORMATION_MESSAGE
-                );
-            }
+            if (!isArmorNoteRead) markArmorNoteRead();
 
             Window parentWindow = SwingUtilities.getWindowAncestor(this);
             new WolfArmorNoteDialog(parentWindow, this).setVisible(true);
@@ -187,17 +171,18 @@ private void initScrollClueButton() {
         add(armorBtn);
     }
 
+    // 6. 우측 상단 벽면 '출구 안내도(O11)' 클릭 영역 (P08 네 번째 퍼즐 직접 진입)
     private void initExitMapButton() {
         JButton exitMapBtn = new JButton();
-        exitMapBtn.setBounds(1070, 80, 175, 230);
-        makeMagnifierButton(exitMapBtn);
+        exitMapBtn.setBounds(740, 120, 145, 175);
+        makeTransparent(exitMapBtn);
 
         exitMapBtn.addActionListener(e -> {
             if (!hasKnightCertificate || !hasWolfKey) {
                 JOptionPane.showMessageDialog(
                     this,
                     "동·서·남·북 네 방향의 통로가 그려진 출구 안내도다.\n" +
-                    "비밀 통로를 열려면 먼저 [기사 임명장]과 [늑대 문장 열쇠]가 필요하다.",
+                    "올바른 문을 열려면 [기사 임명장]과 [늑대 문장 열쇠], 그리고 갑옷 속 단서가 필요하다.",
                     "출구 안내도 (O11)",
                     JOptionPane.INFORMATION_MESSAGE
                 );
@@ -205,13 +190,9 @@ private void initScrollClueButton() {
             }
 
             if (!isArmorNoteRead) {
-                JOptionPane.showMessageDialog(
-                    this,
-                    "출구 안내도 옆에 늑대 문장이 새겨진 잠금장치가 있다.\n" +
-                    "먼저 우측의 [기사 갑옷]을 조사해 단서를 확인해야 할 것 같다.",
-                    "출구 안내도 (O11)",
-                    JOptionPane.INFORMATION_MESSAGE
-                );
+                markArmorNoteRead();
+                Window parentWindow = SwingUtilities.getWindowAncestor(this);
+                new WolfArmorNoteDialog(parentWindow, this).setVisible(true);
                 return;
             }
 
@@ -222,50 +203,54 @@ private void initScrollClueButton() {
         add(exitMapBtn);
     }
 
+    // 7. 우측 하단 획득 아이템 & 단서 다시보기 버튼 배치
+    private void initItemViewerButtons() {
+        passItemButton = createViewerButton("왕실 인증패 확인", 504, new Color(80, 50, 25));
+        passItemButton.addActionListener(e -> {
+            Window parentWindow = SwingUtilities.getWindowAncestor(this);
+            new RoyalPassDialog(parentWindow).setVisible(true);
+        });
+        add(passItemButton);
 
-    private void makeMagnifierButton(JButton btn) {
+        letterItemButton = createViewerButton("왕의 밀서 확인", 550, new Color(100, 35, 25));
+        letterItemButton.addActionListener(e -> {
+            Window parentWindow = SwingUtilities.getWindowAncestor(this);
+            new RoyalSecretLetterDialog(parentWindow).setVisible(true);
+        });
+        add(letterItemButton);
+
+        certItemButton = createViewerButton("임명장 & 열쇠 확인", 596, new Color(45, 60, 85));
+        certItemButton.addActionListener(e -> {
+            Window parentWindow = SwingUtilities.getWindowAncestor(this);
+            new KnightRewardDialog(parentWindow).setVisible(true);
+        });
+        add(certItemButton);
+
+        armorNoteButton = createViewerButton("출구 안내도 열기", 642, new Color(40, 75, 50));
+        armorNoteButton.addActionListener(e -> {
+            Window parentWindow = SwingUtilities.getWindowAncestor(this);
+            new SecretExitPuzzleDialog(parentWindow, this).setVisible(true);
+        });
+        add(armorNoteButton);
+    }
+
+    private JButton createViewerButton(String text, int y, Color bg) {
+        JButton btn = new JButton(text);
+        btn.setBounds(1085, y, 170, 38);
+        btn.setFont(new Font("바탕", Font.BOLD, 13));
+        btn.setBackground(bg);
+        btn.setForeground(new Color(255, 235, 190));
+        btn.setFocusPainted(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setVisible(false);
+        return btn;
+    }
+
+    private void makeTransparent(JButton btn) {
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-        btn.setUI(new javax.swing.plaf.basic.BasicButtonUI() {
-            @Override
-            public void paint(Graphics graphics, JComponent c) {
-                AbstractButton b = (AbstractButton) c;
-                Graphics2D g = (Graphics2D) graphics.create();
-                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                int cx = c.getWidth() / 2;
-                int cy = c.getHeight() / 2;
-                boolean hover = b.getModel().isRollover();
-
-                int r = 15; // 원형 배지 반지름 (지름 30px)
-
-                // 1. 원형 배경 배지 (호버 시 밝은 브라스 톤, 평상시 반투명 다크 톤)
-                g.setColor(hover ? new Color(92, 84, 74, 230) : new Color(36, 32, 27, 195));
-                g.fillOval(cx - r, cy - r, r * 2, r * 2);
-
-                // 2. 호버 시 황금빛 외곽 테두리 (image_218aab 스타일)
-                if (hover) {
-                    g.setColor(new Color(223, 185, 116));
-                    g.setStroke(new BasicStroke(2.2f));
-                    g.drawOval(cx - r + 1, cy - r + 1, (r - 1) * 2, (r - 1) * 2);
-                } else {
-                    g.setColor(new Color(142, 111, 70, 140));
-                    g.setStroke(new BasicStroke(1.2f));
-                    g.drawOval(cx - r, cy - r, r * 2, r * 2);
-                }
-
-                // 3. 중앙 돋보기 렌즈 + 손잡이 (drawOval & drawLine)
-                g.setColor(hover ? new Color(223, 185, 116) : new Color(245, 230, 200));
-                g.setStroke(new BasicStroke(2.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                g.drawOval(cx - 6, cy - 6, 9, 9);          // 돋보기 렌즈
-                g.drawLine(cx + 2, cy + 2, cx + 7, cy + 7); // 돋보기 손잡이
-
-                g.dispose();
-            }
-        });
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
     }
 
     public boolean hasRoyalPass() {
@@ -274,9 +259,11 @@ private void initScrollClueButton() {
 
     public void setRoyalPassAcquired(boolean acquired) {
         this.hasRoyalPass = acquired;
-        if (acquired) {
-            addItemToInventory("ROYAL_PASS", "왕실 인증패", "왕실_인증패");
-        }
+        if (!acquired) return;
+        if (passItemButton != null) passItemButton.setVisible(!isInGame());
+        reportSolved("P05");
+        giveItem(new Item("I07", "왕실 인증패", "초상화 장식장에서 얻은 인증패. 뒷면에 문장 조건이 적혀 있다.",
+            loadRoomImage("왕실_인증패"), () -> new RoyalPassDialog(ownerWindow()).setVisible(true)));
     }
 
     public boolean hasRoyalSecretLetter() {
@@ -285,9 +272,11 @@ private void initScrollClueButton() {
 
     public void setRoyalSecretLetterAcquired(boolean acquired) {
         this.hasRoyalSecretLetter = acquired;
-        if (acquired) {
-            addItemToInventory("ROYAL_LETTER", "왕의 밀서", "왕의_밀서");
-        }
+        if (!acquired) return;
+        if (letterItemButton != null) letterItemButton.setVisible(!isInGame());
+        reportSolved("P06");
+        giveItem(new Item("I08", "왕의 밀서", "문장 보관함에서 나온 밀서. 원탁 자리 배치 조건이 적혀 있다.",
+            loadRoomImage("왕의_밀서"), () -> new RoyalSecretLetterDialog(ownerWindow()).setVisible(true)));
     }
 
     public boolean hasKnightCertificate() {
@@ -301,10 +290,14 @@ private void initScrollClueButton() {
     public void setKnightPuzzleSolved(boolean solved) {
         this.hasKnightCertificate = solved;
         this.hasWolfKey = solved;
-        if (solved) {
-            addItemToInventory("KNIGHT_CERT", "기사 임명장", "기사_임명장");
-            addItemToInventory("WOLF_KEY", "늑대 문장 열쇠", "늑대_문장_열쇠");
-        }
+        if (!solved) return;
+        if (certItemButton != null) certItemButton.setVisible(!isInGame());
+        reportSolved("P07");
+        Runnable view = () -> new KnightRewardDialog(ownerWindow()).setVisible(true);
+        giveItem(new Item("I09", "기사 임명장", "늑대의 기사에게 내려진 임명장.",
+            loadRoomImage("기사_임명장"), view));
+        giveItem(new Item("I10", "늑대 문장 열쇠", "늑대의 자리 아래에 숨겨져 있던 열쇠. 갑옷 가슴의 열쇠구멍에 맞을 것 같다.",
+            loadRoomImage("늑대_문장_열쇠"), view));
     }
 
     public boolean isSecretExitOpened() {
@@ -313,12 +306,33 @@ private void initScrollClueButton() {
 
     public void setSecretExitOpened(boolean opened) {
         this.isSecretExitOpened = opened;
+        if (opened) reportSolved("P08");
     }
 
-    // 3번 방으로 이동 처리
+    /** 늑대 갑옷 속 쪽지(O10)를 처음 확인했을 때 */
+    private void markArmorNoteRead() {
+        isArmorNoteRead = true;
+        if (armorNoteButton != null) armorNoteButton.setVisible(!isInGame());
+        giveItem(new Item("O10", "갑옷 속 쪽지", "늑대 갑옷 안에서 나온 쪽지. 출구 방향에 대한 단서가 적혀 있다.",
+            loadRoomImage("갑옷_속_쪽지"), () -> new WolfArmorNoteDialog(ownerWindow(), this, false).setVisible(true)));
+        updateProgress();
+    }
+
+    /** 퍼즐 오답 시 각 퍼즐 창에서 호출 -> 체력 감소 */
+    public void onPuzzleFailed(String puzzleId) {
+        reportWrongAnswer(puzzleId);
+    }
+
+    private Window ownerWindow() {
+        return SwingUtilities.getWindowAncestor(this);
+    }
+
+    // 북쪽 문 선택 성공 시 3번 방으로 이동 처리
     public void moveToRoom3() {
         if (onMoveToRoom3Callback != null) {
             onMoveToRoom3Callback.run();
+        } else if (isInGame()) {
+            clearRoom();
         } else {
             JOptionPane.showMessageDialog(
                 this,
@@ -329,172 +343,113 @@ private void initScrollClueButton() {
         }
     }
 
+    // ------------------------------------------------------------------
+    // 공통 시스템(RoomPanel) 연동: 방 이름 / 목표 / 힌트 / 진행도 / 저장
+    // ------------------------------------------------------------------
+
+    @Override
+    public String getRoomName() {
+        return "왕실 계승의 방";
+    }
+
+    @Override
+    public String getObjective() {
+        if (!hasRoyalPass) {
+            return "왕 초상화 장식장의 비밀을 풀어라.\n\n· 좌측 하단 독서대에 무언가 적혀 있다.\n· 초상화를 올바른 계승 순서로 누르자.";
+        } else if (!hasRoyalSecretLetter) {
+            return "붉은 방패 모양의 문장 보관함을 열어라.\n\n· [왕실 인증패] 뒷면의 조건을 확인하자.\n· 세 개의 홈에 맞는 문장을 끼우자.";
+        } else if (!hasWolfKey) {
+            return "원탁의 빈자리에 기사들을 앉혀라.\n\n· [왕의 밀서]의 다섯 조건을 확인하자.\n· 문장 방패를 의자로 끌어다 놓자.";
+        } else if (!isArmorNoteRead) {
+            return "늑대 문장 열쇠가 맞는 곳을 찾아라.\n\n· 오른쪽 기사 갑옷들을 살펴보자.";
+        } else if (!isSecretExitOpened) {
+            return "출구 안내도에서 올바른 문을 골라라.\n\n· 갑옷 속 쪽지의 단서를 떠올리자.\n· 틀린 문을 고르면 체력이 줄어든다.";
+        }
+        return "비밀 출구가 열렸다! 다음 방으로 이동하자.";
+    }
+
+    @Override
+    protected String getHintRoomKey() {
+        return "room2";   // resources/data/hints.txt 의 room2 힌트 사용
+    }
+
+    /** hints.txt 의 단계 번호 (아래 getCurrentHints() 의 if 순서와 같음) */
+    @Override
+    protected int getHintStage() {
+        if (!hasRoyalPass) return 1;
+        if (!hasRoyalSecretLetter) return 2;
+        if (!hasWolfKey) return 3;
+        if (!isArmorNoteRead) return 4;
+        if (!isSecretExitOpened) return 5;
+        return 6;
+    }
+
+    /** hints.txt 를 못 읽었을 때 쓰는 기본 힌트 (기존 코드 유지) */
+    @Override
+    public List<String> getCurrentHints() {
+        if (!hasRoyalPass) {
+            return Arrays.asList(
+                "왼쪽 아래 독서대의 [왕위 계승 기록]을 읽어보세요. 초상화 장식장의 순서 단서입니다.",
+                "세른 바로 다음은 베른입니다(붙어 있음). 아렌은 다렌보다 먼저지만, 둘 사이에 다른 왕이 있어야 합니다.",
+                "정답 예시: 아렌 → 세른 → 베른 → 다렌  (또는 세른 → 베른 → 아렌 → 다렌)");
+        } else if (!hasRoyalSecretLetter) {
+            return Arrays.asList(
+                "[왕실 인증패] 뒷면 조건을 보세요. 홈은 3개뿐이고, 짐승(사자·독수리)은 하나만 넣을 수 있습니다.",
+                "독수리를 넣으면 검 → 방패 → 장미 → 왕관까지 줄줄이 필요해서 홈이 모자랍니다. 짐승은 사자입니다.",
+                "정답: 사자 + 장미 + 왕관");
+        } else if (!hasWolfKey) {
+            return Arrays.asList(
+                "왕좌는 12시 방향입니다. ⑤번 조건 — 왕좌와 마주 보는 6시 자리가 '나의 기사'입니다.",
+                "늑대는 6시, 사슴은 늑대의 시계 방향 다음인 8시입니다. 곰은 왕좌 옆(2시·10시)에 앉지 않습니다.",
+                "정답: 2시 독수리 · 4시 곰 · 6시 늑대 · 8시 사슴 · 10시 사자");
+        } else if (!isArmorNoteRead) {
+            return Arrays.asList(
+                "[늑대 문장 열쇠]는 오른쪽에 서 있는 기사 갑옷 중 하나에 맞습니다.",
+                "오른쪽 기사 갑옷들을 클릭해 보세요.");
+        } else if (!isSecretExitOpened) {
+            return Arrays.asList(
+                "쪽지에 따르면 동쪽은 무기고, 그 맞은편(서쪽)은 막다른 길, 남쪽은 무너졌습니다.",
+                "남은 방향은 하나뿐입니다 — 북쪽 문을 고르세요.");
+        }
+        return Arrays.asList("출구가 열렸습니다. 다음 방으로 이동하세요.");
+    }
+
+    @Override
+    public int getTotalPuzzles() {
+        return 4;
+    }
+
+    @Override
+    public int getSolvedCount() {
+        int n = 0;
+        if (hasRoyalPass) n++;
+        if (hasRoyalSecretLetter) n++;
+        if (hasWolfKey) n++;
+        if (isSecretExitOpened) n++;
+        return n;
+    }
+
+    @Override
+    public void saveState(Properties p) {
+        p.setProperty("room2.royalPass", String.valueOf(hasRoyalPass));
+        p.setProperty("room2.secretLetter", String.valueOf(hasRoyalSecretLetter));
+        p.setProperty("room2.knight", String.valueOf(hasWolfKey));
+        p.setProperty("room2.armorNote", String.valueOf(isArmorNoteRead));
+    }
+
+    @Override
+    public void loadState(Properties p) {
+        if (Boolean.parseBoolean(p.getProperty("room2.royalPass"))) setRoyalPassAcquired(true);
+        if (Boolean.parseBoolean(p.getProperty("room2.secretLetter"))) setRoyalSecretLetterAcquired(true);
+        if (Boolean.parseBoolean(p.getProperty("room2.knight"))) setKnightPuzzleSolved(true);
+        if (Boolean.parseBoolean(p.getProperty("room2.armorNote"))) markArmorNoteRead();
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         if (backgroundImage != null) {
             g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
-        }
-    }
-
-    // 7. 우측 상단 음소거 버튼
-    private void initSoundButton() {
-        soundButton = createBrassButton(muted ? "소리 꺼짐" : "소리 켜짐", this::toggleSound);
-        updateSoundButtonBounds(1280);
-        add(soundButton);
-    }
-
-    private void toggleSound() {
-        muted = !muted;
-        System.setProperty("skyborne.mute", String.valueOf(muted));
-        soundButton.setText(muted ? "소리 꺼짐" : "소리 켜짐");
-        updateSoundButtonBounds(getWidth() > 0 ? getWidth() : 1280);
-    }
-
-    private void updateSoundButtonBounds(int panelWidth) {
-        Dimension size = soundButton.getPreferredSize();
-        int width = size.width + 16;
-        soundButton.setBounds(panelWidth - 25 - width, 15, width, size.height);
-    }
-
-    private JButton createBrassButton(String text, Runnable action) {
-        final Color CREAM = new Color(245, 230, 200);
-        final Color GOLD = new Color(223, 185, 116);
-        final Color EDGE = new Color(142, 111, 70);
-
-        JButton b = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics graphics) {
-                Graphics2D g = (Graphics2D) graphics.create();
-                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-                boolean lit = getModel().isRollover() || isFocusOwner();
-                Color top = lit ? new Color(105, 79, 48) : new Color(69, 55, 40);
-                Color bottom = new Color(42, 33, 26);
-                if (getModel().isArmed()) top = bottom;
-
-                g.setPaint(new GradientPaint(0, 0, top, 0, getHeight(), bottom));
-                g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 7, 7);
-                g.setColor(lit ? GOLD : EDGE);
-                g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 7, 7);
-                g.dispose();
-                super.paintComponent(graphics);
-            }
-        };
-
-        Font korean = new Font("Malgun Gothic", Font.BOLD, 14);
-        if (!korean.getFamily().equals(Font.DIALOG) && korean.canDisplay('한')) {
-            b.setFont(korean);
-        } else {
-            b.setFont(UIManager.getFont("Label.font").deriveFont(Font.BOLD, 14f));
-        }
-
-        b.setMargin(new Insets(0, 0, 0, 0));
-        b.setContentAreaFilled(false);
-        b.setFocusPainted(false);
-        b.setBorder(BorderFactory.createEmptyBorder(9, 12, 9, 12));
-        b.setForeground(CREAM);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        b.addActionListener(e -> action.run());
-        return b;
-    }
-
-    // 8. 하단 1줄 8칸 정사각형 인벤토리 초기화
-    private void initInventoryBar() {
-        for (int i = 0; i < INV_COLS; i++) {
-            final int slotIndex = i;
-            int x = INV_MARGIN_X + i * (INV_SLOT_SIZE + INV_GAP);
-
-            JButton slot = new JButton() {
-                @Override
-                protected void paintComponent(Graphics graphics) {
-                    Graphics2D g = (Graphics2D) graphics.create();
-                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-                    boolean hasItem = inventoryItemIds[slotIndex] != null;
-                    boolean hover = getModel().isRollover() && hasItem;
-
-                    g.setColor(hasItem ? new Color(36, 28, 22, 235) : new Color(20, 17, 14, 195));
-                    g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
-
-                    g.setColor(hover ? new Color(235, 198, 125) : new Color(142, 111, 70, hasItem ? 255 : 150));
-                    g.setStroke(new BasicStroke(hover ? 2.2f : 1.5f));
-                    g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
-
-                    g.setColor(new Color(90, 70, 45, 110));
-                    g.setStroke(new BasicStroke(1f));
-                    g.drawRoundRect(4, 4, getWidth() - 9, getHeight() - 9, 7, 7);
-
-                    g.dispose();
-                    super.paintComponent(graphics);
-                }
-            };
-
-            slot.setBounds(x, INV_Y, INV_SLOT_SIZE, INV_SLOT_SIZE);
-            slot.setContentAreaFilled(false);
-            slot.setFocusPainted(false);
-            slot.setBorderPainted(false);
-            slot.setMargin(new Insets(6, 6, 6, 6));
-            slot.setFont(new Font("Malgun Gothic", Font.BOLD, 14));
-            slot.setForeground(new Color(245, 230, 200));
-            slot.setHorizontalTextPosition(SwingConstants.CENTER);
-            slot.setVerticalTextPosition(SwingConstants.BOTTOM);
-
-            slot.addActionListener(e -> onInventorySlotClick(slotIndex));
-
-            inventorySlots[i] = slot;
-            add(slot);
-        }
-    }
-
-    // 빈 슬롯을 찾아 아이템 추가 (중복 등록 방지)
-    private void addItemToInventory(String itemId, String displayName, String iconBaseName) {
-        for (String existing : inventoryItemIds) {
-            if (itemId.equals(existing)) return;
-        }
-        for (int i = 0; i < INV_COLS; i++) {
-            if (inventoryItemIds[i] == null) {
-                inventoryItemIds[i] = itemId;
-                JButton slot = inventorySlots[i];
-                slot.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-                Image img = iconBaseName != null ? loadRoomImage(iconBaseName) : null;
-                if (img != null) {
-                    int iconSize = INV_SLOT_SIZE - 48;
-                    Image scaled = img.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
-                    slot.setIcon(new ImageIcon(scaled));
-                    slot.setText(displayName);
-                } else {
-                    slot.setText("<html><center>" + displayName.replace(" ", "<br>") + "</center></html>");
-                }
-                slot.repaint();
-                break;
-            }
-        }
-    }
-
-    // 인벤토리 칸 클릭 시 해당 아이템 팝업 열기
-    private void onInventorySlotClick(int index) {
-        String itemId = inventoryItemIds[index];
-        if (itemId == null) return;
-
-        Window parentWindow = SwingUtilities.getWindowAncestor(this);
-        switch (itemId) {
-            case "ROYAL_PASS":
-                new RoyalPassDialog(parentWindow).setVisible(true);
-                break;
-            case "ROYAL_LETTER":
-                new RoyalSecretLetterDialog(parentWindow).setVisible(true);
-                break;
-            case "KNIGHT_CERT":
-            case "WOLF_KEY":
-                new KnightRewardDialog(parentWindow).setVisible(true);
-                break;
-            case "ARMOR_NOTE":
-                new WolfArmorNoteDialog(parentWindow, this).setVisible(true);
-                break;
         }
     }
 

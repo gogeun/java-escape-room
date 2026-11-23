@@ -176,6 +176,7 @@ public class SecretExitPuzzleDialog extends JDialog {
                 failReason = "남쪽 문 너머 통로는 무너져 내려 지나갈 수 없습니다.";
             }
 
+            parentRoom.onPuzzleFailed("P08"); // 오답 → 체력 감소
             JOptionPane.showMessageDialog(
                 this,
                 failReason + "\n늑대 갑옷 속 쪽지의 단서를 다시 확인해 보세요.",

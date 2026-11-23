@@ -171,6 +171,7 @@ public class PortraitPuzzleDialog extends JDialog {
             dispose();
             new RoyalPassDialog(owner).setVisible(true);
         } else {
+            parentRoom.onPuzzleFailed("P05"); // 오답 → 체력 감소
             JOptionPane.showMessageDialog(
                 this,
                 "초상화 뒤에서 둔탁한 소리가 나며 장치가 초기화되었습니다.\n기록의 계승 순서를 다시 확인해 보세요.",
