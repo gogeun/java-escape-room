@@ -3,6 +3,9 @@ package room3;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import javax.imageio.ImageIO;
 
@@ -11,7 +14,7 @@ public final class AssetManager {
     private final Set<String> missing=new LinkedHashSet<>();
     public BufferedImage image(String name) {
         return cache.computeIfAbsent(name, key -> {
-            try(var stream=AssetManager.class.getResourceAsStream("/room3/images/"+key)) {
+            try(var stream=openImage(key)) {
                 if(stream==null) throw new IOException("Missing resource: "+key);
                 BufferedImage result=ImageIO.read(stream);
                 if(result==null) throw new IOException("Invalid image: "+key);
@@ -48,3 +51,4 @@ public final class AssetManager {
     }
     public Set<String> missing() { return Set.copyOf(missing); }
 }
+
